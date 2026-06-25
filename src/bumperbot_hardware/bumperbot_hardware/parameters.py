@@ -116,13 +116,14 @@ LEFT_FF_TRIM = 1.0
 RIGHT_FF_TRIM = 1.0
 PID_OUTPUT_MIN = -255.0
 PID_OUTPUT_MAX = 255.0
-# Clamp on the per-wheel integral. THIS is the knob that fixes the late LEFT
-# turn: 150 let the integral wind so far it overshot the balanced point (~50 cm
-# straight, then curved left). 50 lets it correct the wheel mismatch but stops
-# it before it overshoots, so it settles straight.
-#   still turns LEFT at the end  -> lower this (40, 30)
-#   never straightens, curves RIGHT the whole way -> raise it (70, 90)
-INTEGRAL_WINDUP_LIMIT = 50.0
+# Clamp on the per-wheel integral. THIS is the knob that fixes the late drift,
+# and it is now BRACKETED:
+#   150 -> integral over-corrects -> drifts LEFT after 50 cm
+#    50 -> integral under-corrects -> drifts RIGHT after 50 cm
+# so the balanced value is in the middle. 90 is the midpoint to try.
+#   drifts LEFT at the end  -> lower this (80, 70)
+#   drifts RIGHT at the end -> raise this (100, 110)
+INTEGRAL_WINDUP_LIMIT = 90.0
 CONTROL_RATE = 20.0             # Hz (control loop frequency)
 MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor static friction
 # Safety watchdog: if no /cmd_vel arrives within this many seconds, the PID
