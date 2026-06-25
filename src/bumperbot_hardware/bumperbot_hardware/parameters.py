@@ -108,6 +108,16 @@ KD = 0.0
 #   KFF ≈ PID_OUTPUT_MAX / (max ticks/sec at MAX_LINEAR_SPEED)
 #       = 255 / ((0.30 / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV) ≈ 0.38
 KFF = 0.38
+# Per-wheel feed-forward TRIM — compensates unequal motors at equal PWM.
+# With pure constant PWM the robot curved RIGHT, which means the LEFT wheel is
+# faster than the RIGHT. We slow the faster (LEFT) wheel down a little so equal
+# command -> equal speed -> straight. 1.0 = no change. Lower LEFT_FF_TRIM (or
+# raise RIGHT_FF_TRIM) until it drives straight. Trimming the FASTER wheel DOWN
+# is preferred so we never hit the PWM ceiling.
+#   curves RIGHT (left too fast) -> lower LEFT_FF_TRIM
+#   curves LEFT  (right too fast) -> lower RIGHT_FF_TRIM
+LEFT_FF_TRIM = 0.92
+RIGHT_FF_TRIM = 1.0
 PID_OUTPUT_MIN = -255.0
 PID_OUTPUT_MAX = 255.0
 INTEGRAL_WINDUP_LIMIT = 150.0   # Clamp integral term

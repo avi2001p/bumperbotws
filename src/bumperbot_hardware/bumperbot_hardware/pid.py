@@ -139,9 +139,10 @@ class PIDController(Node):
         self.left_speed = a * msg.data[0] + (1.0 - a) * self.left_speed
         self.right_speed = a * msg.data[1] + (1.0 - a) * self.right_speed
 
-    def compute_pid(self, target, actual, prev_actual, integral):
+    def compute_pid(self, target, actual, prev_actual, integral, ff_trim=1.0):
         """
         Compute feed-forward + PID output for one wheel.
+        ff_trim scales this wheel's feed-forward to balance unequal motors.
         Returns: (output, new_prev_actual, new_integral)
         """
         # Re-read params for live tuning
@@ -153,7 +154,8 @@ class PIDController(Node):
 
         # Feed-forward: baseline PWM proportional to the target speed so both
         # wheels move together immediately and the PID only trims the error.
-        ff_term = KFF * target
+        # ff_trim balances a stronger/weaker motor so equal command = equal speed.
+        ff_term = KFF * target * ff_trim
 
         # Proportional
         p_term = kp * error
@@ -223,7 +225,8 @@ class PIDController(Node):
                     self.target_left_speed,
                     self.left_speed,
                     self.left_prev_actual,
-                    self.left_integral
+                    self.left_integral,
+                    LEFT_FF_TRIM
                 )
             )
 
@@ -233,7 +236,8 @@ class PIDController(Node):
                     self.target_right_speed,
                     self.right_speed,
                     self.right_prev_actual,
-                    self.right_integral
+                    self.right_integral,
+                    RIGHT_FF_TRIM
                 )
             )
 
