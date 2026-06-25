@@ -47,9 +47,9 @@ def generate_launch_description():
         name="pid_controller",
         output="screen",
         parameters=[{
-            "kp": 3.5,
-            "ki": 1.0,
-            "kd": 0.02,
+            "kp": 1.2,
+            "ki": 0.5,
+            "kd": 0.0,
         }],
     )
 

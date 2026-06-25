@@ -81,10 +81,13 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # ==========================================================
 # PID CONTROLLER
 # ==========================================================
-# Starting gains — tune these on the real robot
-KP = 3.5
-KI = 1.0
-KD = 0.02
+# Starting gains — tune these on the real robot.
+# With feed-forward (KFF) doing most of the work, KP/KI only need to TRIM the
+# small remaining error, so they are intentionally gentle to avoid oscillation
+# ("dancing"). Raise slowly if the robot is sluggish to reach speed.
+KP = 1.2
+KI = 0.5
+KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,
 # which makes both wheels respond together and drive straight.
@@ -105,8 +108,8 @@ CMD_VEL_TIMEOUT = 0.5           # seconds
 # ----------------------------------------------------------
 # P gain that converts heading error (rad) into a correcting angular.z
 # (rad/s) command while driving straight. Higher = snappier correction
-# but can oscillate. Tune on the robot.
-KP_HEADING = 2.0
+# but can oscillate/wiggle. Tune on the robot.
+KP_HEADING = 1.0
 # Max correction the heading-hold loop may command (rad/s)
 MAX_HEADING_CORRECTION = 0.6
 # ==========================================================

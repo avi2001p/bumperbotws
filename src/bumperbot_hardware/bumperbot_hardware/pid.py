@@ -167,9 +167,19 @@ class PIDController(Node):
         derivative = -(actual - prev_actual) / self.dt
         d_term = kd * derivative
 
-        # Combined output, clamped
+        # Combined output
         output = ff_term + p_term + i_term + d_term
-        output = max(PID_OUTPUT_MIN, min(PID_OUTPUT_MAX, output))
+
+        # Direction-locked clamp: a wheel commanded FORWARD may only
+        # drive-forward-or-coast (never reverse), and vice-versa. This stops the
+        # controller from flip-flopping the motor direction when it overshoots,
+        # which shows up as the wheels "dancing" in place.
+        if target > 0.0:
+            output = max(0.0, min(PID_OUTPUT_MAX, output))
+        elif target < 0.0:
+            output = max(PID_OUTPUT_MIN, min(0.0, output))
+        else:
+            output = 0.0
 
         return output, actual, integral
 
