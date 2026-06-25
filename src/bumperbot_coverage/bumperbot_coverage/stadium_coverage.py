@@ -49,10 +49,8 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     WATER_CLEANING_TOPIC,
     KP_HEADING,
-    KI_HEADING,
+    K_CROSSTRACK,
     MAX_HEADING_CORRECTION,
-    HEADING_INTEGRAL_LIMIT,
-    HEADING_DEADBAND,
 )
 
 
@@ -403,27 +401,21 @@ class StadiumCoverageNode(Node):
         return False
 
     def heading_correction(self):
-        """Gentle, windup-proof PI heading-hold for the current straight."""
-        heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
+        """Steer back onto the segment's start LINE using heading + cross-track.
 
-        # Deadband: ignore tiny errors so odometry noise near straight doesn't
-        # cause constant twitchy steering, and let the integral relax.
-        if abs(heading_error) < HEADING_DEADBAND:
-            self.heading_integral *= 0.9
-            return 0.0
+        Heading-hold alone keeps the robot pointing straight but lets a sideways
+        offset persist; the cross-track term pulls it back onto the line.
+        """
+        dx = self.x - self.segment_start_x
+        dy = self.y - self.segment_start_y
+
+        heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
+        # signed sideways offset from the line (+ = robot is LEFT of the line)
+        cross_track = (-dx * math.sin(self.segment_start_theta)
+                       + dy * math.cos(self.segment_start_theta))
 
         correction = -(KP_HEADING * heading_error
-                       + KI_HEADING * self.heading_integral)
-
-        # Anti-windup: only accumulate the integral while NOT saturated.
-        if abs(correction) < MAX_HEADING_CORRECTION:
-            self.heading_integral += heading_error * 0.05  # 20 Hz loop
-            self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
-                                        min(HEADING_INTEGRAL_LIMIT,
-                                            self.heading_integral))
-            correction = -(KP_HEADING * heading_error
-                           + KI_HEADING * self.heading_integral)
-
+                       + K_CROSSTRACK * cross_track)
         return max(-MAX_HEADING_CORRECTION,
                    min(MAX_HEADING_CORRECTION, correction))
 
