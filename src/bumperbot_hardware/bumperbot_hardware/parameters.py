@@ -88,7 +88,11 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # then the other"). KI slowly trims to the right speed. Straightness is handled
 # by the heading loop (KP_HEADING), not by the per-wheel loops.
 KP = 0.3
-KI = 0.3
+# KI is the term that EQUALIZES the two wheels: it boosts the weaker/slower
+# wheel's PWM until it reaches the commanded speed, so both wheels match and the
+# robot tracks straight. Kept reasonably strong; KP stays low so it stays smooth
+# (it was a high KP, not KI, that caused the earlier jerking).
+KI = 0.6
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,

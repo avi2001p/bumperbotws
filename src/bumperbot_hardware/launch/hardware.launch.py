@@ -48,7 +48,7 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "kp": 0.3,
-            "ki": 0.3,
+            "ki": 0.6,
             "kd": 0.0,
         }],
     )
