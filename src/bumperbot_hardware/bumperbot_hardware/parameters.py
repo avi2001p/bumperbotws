@@ -116,19 +116,26 @@ SPEED_FILTER_ALPHA = 0.25
 # Output slew-rate limit (max PWM change per control cycle). Prevents the
 # command jumping 0 -> full -> 0, which causes the "move-stop-move" surging.
 OUTPUT_SLEW_LIMIT = 30.0
+# Cross-coupling / wheel-synchronisation gain. Directly drives the ACTUAL
+# left-right speed difference to the INTENDED difference, so for straight
+# driving both wheels are forced to the SAME speed even if one motor is weaker.
+# This is what keeps the two wheels "locked together". Raise for tighter
+# matching, lower if the wheels start fighting/oscillating.
+K_SYNC = 0.4
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
 # PI heading controller. KP reacts to the current heading error; KI accumulates
 # it to cancel a CONSTANT bias (e.g. one wheel slightly weaker from weight
 # imbalance) that a P-only controller would leave as a permanent slight turn.
-KP_HEADING = 1.6
-# Cross-track gain: steers the robot back onto the intended straight LINE based
-# on its sideways offset from that line (m). Heading-hold alone keeps the robot
-# pointing straight but lets a sideways offset persist (ends up parallel-but-
-# left); this term pulls it back onto the line so it finishes ON the line.
-K_CROSSTRACK = 4.0
-KI_HEADING = 0.4   # (legacy; cross-track now handles steady offset)
+KP_HEADING = 1.0
+# Cross-track gain: steers back onto the line using odometry X/Y offset.
+# DISABLED (0.0) on purpose: odometry heading/position on this robot is too
+# noisy/biased (mismatched cheap encoders) for cross-track — correcting hard off
+# it actually pushes the robot off course. Re-enable ONLY once heading comes
+# from the IMU gyro (true physical yaw), not the wheel encoders.
+K_CROSSTRACK = 0.0
+KI_HEADING = 0.4   # (legacy)
 # Max correction the heading-hold loop may command (rad/s)
 MAX_HEADING_CORRECTION = 0.6
 # Clamp on the heading integral (rad·s) to prevent windup

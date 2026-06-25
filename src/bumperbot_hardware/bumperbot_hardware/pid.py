@@ -170,19 +170,20 @@ class PIDController(Node):
 
         # Combined output
         output = ff_term + p_term + i_term + d_term
-
-        # Direction-locked clamp: a wheel commanded FORWARD may only
-        # drive-forward-or-coast (never reverse), and vice-versa. This stops the
-        # controller from flip-flopping the motor direction when it overshoots,
-        # which shows up as the wheels "dancing" in place.
-        if target > 0.0:
-            output = max(0.0, min(PID_OUTPUT_MAX, output))
-        elif target < 0.0:
-            output = max(PID_OUTPUT_MIN, min(0.0, output))
-        else:
-            output = 0.0
+        output = self._dir_clamp(output, target)
 
         return output, actual, integral
+
+    @staticmethod
+    def _dir_clamp(output, target):
+        """Direction-locked clamp: a wheel commanded FORWARD may only
+        drive-forward-or-coast (never reverse), and vice-versa. Stops the
+        controller flip-flopping the motor direction (the "dancing")."""
+        if target > 0.0:
+            return max(0.0, min(PID_OUTPUT_MAX, output))
+        if target < 0.0:
+            return max(PID_OUTPUT_MIN, min(0.0, output))
+        return 0.0
 
     def _slew_limit(self, prev, target_out):
         """Limit how fast the output may change between control cycles."""
@@ -235,6 +236,15 @@ class PIDController(Node):
                     self.right_integral
                 )
             )
+
+            # Cross-coupled wheel SYNCHRONISATION: drive the ACTUAL left-right
+            # speed difference to the INTENDED difference. For straight driving
+            # (intended diff = 0) this forces both wheels to the SAME speed even
+            # if one motor is weaker — it locks the two wheels together.
+            sync = K_SYNC * ((self.left_speed - self.right_speed)
+                             - (self.target_left_speed - self.target_right_speed))
+            new_left = self._dir_clamp(new_left - sync, self.target_left_speed)
+            new_right = self._dir_clamp(new_right + sync, self.target_right_speed)
 
             # Slew-rate limit so the PWM ramps instead of snapping 0<->full,
             # which removes the surge/coast "move-stop-move" behaviour.
