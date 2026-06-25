@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+                "limitSymbolsToIncludedHeaders": false
+            },
+            "includePath": [
+                "/home/avishka/bumperbot_ws/install/bumperbot_cpp_examples/include/**",
+                "/home/avishka/bumperbot_ws/install/bumperbot_msgs/include/**",
+                "/home/avishka/bumperbot_ws/install/bumperbot_localization/include/**",
+                "/home/avishka/bumperbot_ws/install/bumperbot_firmware/include/**",
+                "/home/avishka/bumperbot_ws/install/bumperbot_controller/include/**",
+                "/opt/ros/humble/include/**",
+                "/usr/include/**",
+                "/opt/ros/humble/include/rclcpp_action",
+                "/opt/ros/humble/include/rclcpp",
+                "/opt/ros/humble/include/rcl"
+            ],
+            "name": "ros2",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}

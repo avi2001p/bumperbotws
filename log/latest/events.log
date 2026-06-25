@@ -1,0 +1,108 @@
+[0.000000] (-) TimerEvent: {}
+[0.001655] (-) JobUnselected: {'identifier': 'bumperbot_bringup'}
+[0.002581] (-) JobUnselected: {'identifier': 'bumperbot_controller'}
+[0.002752] (-) JobUnselected: {'identifier': 'bumperbot_coverage'}
+[0.002870] (-) JobUnselected: {'identifier': 'bumperbot_cpp_examples'}
+[0.002980] (-) JobUnselected: {'identifier': 'bumperbot_cpp_examples2'}
+[0.003094] (-) JobUnselected: {'identifier': 'bumperbot_description'}
+[0.003195] (-) JobUnselected: {'identifier': 'bumperbot_firmware'}
+[0.003290] (-) JobUnselected: {'identifier': 'bumperbot_localization'}
+[0.003381] (-) JobUnselected: {'identifier': 'bumperbot_mapping'}
+[0.003474] (-) JobUnselected: {'identifier': 'bumperbot_msgs'}
+[0.003568] (-) JobUnselected: {'identifier': 'bumperbot_odometry'}
+[0.003658] (-) JobUnselected: {'identifier': 'bumperbot_py_examples'}
+[0.003756] (-) JobUnselected: {'identifier': 'bumperbot_py_examples1'}
+[0.003844] (-) JobUnselected: {'identifier': 'bumperbot_utils'}
+[0.003924] (-) JobUnselected: {'identifier': 'encoder_reader'}
+[0.004014] (-) JobUnselected: {'identifier': 'rf2o_laser_odometry'}
+[0.004093] (-) JobUnselected: {'identifier': 'rplidar_ros'}
+[0.004181] (bumperbot_hardware) JobQueued: {'identifier': 'bumperbot_hardware', 'dependencies': OrderedDict()}
+[0.004272] (bumperbot_hardware) JobStarted: {'identifier': 'bumperbot_hardware'}
+[0.098921] (-) TimerEvent: {}
+[0.199616] (-) TimerEvent: {}
+[0.300524] (-) TimerEvent: {}
+[0.401499] (-) TimerEvent: {}
+[0.502438] (-) TimerEvent: {}
+[0.606546] (-) TimerEvent: {}
+[0.708110] (-) TimerEvent: {}
+[0.809410] (-) TimerEvent: {}
+[0.910168] (-) TimerEvent: {}
+[1.010840] (-) TimerEvent: {}
+[1.111519] (-) TimerEvent: {}
+[1.212155] (-) TimerEvent: {}
+[1.312946] (-) TimerEvent: {}
+[1.413812] (-) TimerEvent: {}
+[1.514771] (-) TimerEvent: {}
+[1.615686] (-) TimerEvent: {}
+[1.716824] (-) TimerEvent: {}
+[1.817591] (-) TimerEvent: {}
+[1.918683] (-) TimerEvent: {}
+[2.019535] (-) TimerEvent: {}
+[2.121687] (-) TimerEvent: {}
+[2.222472] (-) TimerEvent: {}
+[2.323221] (-) TimerEvent: {}
+[2.423964] (-) TimerEvent: {}
+[2.524623] (-) TimerEvent: {}
+[2.625290] (-) TimerEvent: {}
+[2.726040] (-) TimerEvent: {}
+[2.826688] (-) TimerEvent: {}
+[2.927341] (-) TimerEvent: {}
+[3.027983] (-) TimerEvent: {}
+[3.128640] (-) TimerEvent: {}
+[3.229300] (-) TimerEvent: {}
+[3.330081] (-) TimerEvent: {}
+[3.430879] (-) TimerEvent: {}
+[3.531781] (-) TimerEvent: {}
+[3.632556] (-) TimerEvent: {}
+[3.734753] (-) TimerEvent: {}
+[3.836335] (-) TimerEvent: {}
+[3.876364] (bumperbot_hardware) Command: {'cmd': ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', 'egg_info', '--egg-base', '../../build/bumperbot_hardware', 'build', '--build-base', '/home/pi/bumperbot_ws/build/bumperbot_hardware/build', 'install', '--record', '/home/pi/bumperbot_ws/build/bumperbot_hardware/install.log', '--single-version-externally-managed', 'install_data'], 'cwd': '/home/pi/bumperbot_ws/src/bumperbot_hardware', 'env': {'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pi', 'SSH_CLIENT': '10.127.241.84 55784 22', 'XDG_SESSION_TYPE': 'tty', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib', 'MOTD_SHOWN': 'pam', 'HOME': '/home/pi', 'OLDPWD': '/home/pi', 'SSH_TTY': '/dev/pts/9', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLCON_PREFIX_PATH': '/home/pi/bumperbot_ws/install', 'ROS_DISTRO': 'humble', 'LOGNAME': 'pi', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'XDG_SESSION_CLASS': 'user', 'TERM': 'xterm-256color', 'XDG_SESSION_ID': '19', 'ROS_LOCALHOST_ONLY': '0', 'PATH': '/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin', 'XDG_RUNTIME_DIR': '/run/user/1000', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:', 'ROS_DOMAIN_ID': '0', 'AMENT_PREFIX_PATH': '/home/pi/bumperbot_ws/install/bumperbot_hardware:/home/pi/bumperbot_ws/install/bumperbot_coverage:/opt/ros/humble', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'PWD': '/home/pi/bumperbot_ws/build/bumperbot_hardware', 'LC_ALL': 'en_US.UTF-8', 'SSH_CONNECTION': '10.127.241.84 55784 10.127.241.1 22', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pi/bumperbot_ws/build/bumperbot_hardware/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages:/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages:/home/pi/bumperbot_ws/install/bumperbot_coverage/lib/python3.10/site-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages', 'COLCON': '1'}, 'shell': False}
+[3.936625] (-) TimerEvent: {}
+[4.037420] (-) TimerEvent: {}
+[4.138220] (-) TimerEvent: {}
+[4.238915] (-) TimerEvent: {}
+[4.339584] (-) TimerEvent: {}
+[4.440238] (-) TimerEvent: {}
+[4.540876] (-) TimerEvent: {}
+[4.641542] (-) TimerEvent: {}
+[4.742373] (-) TimerEvent: {}
+[4.843047] (-) TimerEvent: {}
+[4.943660] (-) TimerEvent: {}
+[5.044348] (-) TimerEvent: {}
+[5.145017] (-) TimerEvent: {}
+[5.195621] (bumperbot_hardware) StdoutLine: {'line': b'running egg_info\n'}
+[5.199288] (bumperbot_hardware) StdoutLine: {'line': b'writing ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/PKG-INFO\n'}
+[5.200448] (bumperbot_hardware) StdoutLine: {'line': b'writing dependency_links to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/dependency_links.txt\n'}
+[5.201668] (bumperbot_hardware) StdoutLine: {'line': b'writing entry points to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/entry_points.txt\n'}
+[5.203801] (bumperbot_hardware) StdoutLine: {'line': b'writing requirements to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/requires.txt\n'}
+[5.205456] (bumperbot_hardware) StdoutLine: {'line': b'writing top-level names to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/top_level.txt\n'}
+[5.212980] (bumperbot_hardware) StdoutLine: {'line': b"reading manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'\n"}
+[5.218261] (bumperbot_hardware) StdoutLine: {'line': b"writing manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'\n"}
+[5.218963] (bumperbot_hardware) StdoutLine: {'line': b'running build\n'}
+[5.219491] (bumperbot_hardware) StdoutLine: {'line': b'running build_py\n'}
+[5.220768] (bumperbot_hardware) StdoutLine: {'line': b'copying bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware\n'}
+[5.223165] (bumperbot_hardware) StdoutLine: {'line': b'running install\n'}
+[5.224481] (bumperbot_hardware) StdoutLine: {'line': b'running install_lib\n'}
+[5.228543] (bumperbot_hardware) StdoutLine: {'line': b'copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware\n'}
+[5.232565] (bumperbot_hardware) StdoutLine: {'line': b'byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/odometry.py to odometry.cpython-310.pyc\n'}
+[5.238585] (bumperbot_hardware) StdoutLine: {'line': b'byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/motor_driver.py to motor_driver.cpython-310.pyc\n'}
+[5.242205] (bumperbot_hardware) StdoutLine: {'line': b'byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/parameters.py to parameters.cpython-310.pyc\n'}
+[5.244433] (bumperbot_hardware) StdoutLine: {'line': b'byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/encoder_reader.py to encoder_reader.cpython-310.pyc\n'}
+[5.245026] (-) TimerEvent: {}
+[5.247870] (bumperbot_hardware) StdoutLine: {'line': b'byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/pid.py to pid.cpython-310.pyc\n'}
+[5.250670] (bumperbot_hardware) StdoutLine: {'line': b'running install_data\n'}
+[5.251958] (bumperbot_hardware) StdoutLine: {'line': b'running install_egg_info\n'}
+[5.260277] (bumperbot_hardware) StdoutLine: {'line': b"removing '/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info' (and everything under it)\n"}
+[5.262033] (bumperbot_hardware) StdoutLine: {'line': b'Copying ../../build/bumperbot_hardware/bumperbot_hardware.egg-info to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info\n'}
+[5.269089] (bumperbot_hardware) StdoutLine: {'line': b'running install_scripts\n'}
+[5.345213] (-) TimerEvent: {}
+[5.350607] (bumperbot_hardware) StdoutLine: {'line': b'Installing encoder_reader script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware\n'}
+[5.351858] (bumperbot_hardware) StdoutLine: {'line': b'Installing motor_driver script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware\n'}
+[5.353647] (bumperbot_hardware) StdoutLine: {'line': b'Installing odometry script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware\n'}
+[5.354523] (bumperbot_hardware) StdoutLine: {'line': b'Installing pid script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware\n'}
+[5.358213] (bumperbot_hardware) StdoutLine: {'line': b"writing list of installed files to '/home/pi/bumperbot_ws/build/bumperbot_hardware/install.log'\n"}
+[5.445518] (-) TimerEvent: {}
+[5.487330] (bumperbot_hardware) CommandEnded: {'returncode': 0}
+[5.546149] (-) TimerEvent: {}
+[5.548110] (bumperbot_hardware) JobEnded: {'identifier': 'bumperbot_hardware', 'rc': 0}
+[5.551487] (-) EventReactorShutdown: {}

@@ -1,0 +1,6 @@
+[console_scripts]
+encoder_reader = bumperbot_hardware.encoder_reader:main
+motor_driver = bumperbot_hardware.motor_driver:main
+odometry = bumperbot_hardware.odometry:main
+pid = bumperbot_hardware.pid:main
+

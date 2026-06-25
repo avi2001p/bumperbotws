@@ -1,0 +1,29 @@
+running egg_info
+writing ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/PKG-INFO
+writing dependency_links to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/dependency_links.txt
+writing entry points to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/entry_points.txt
+writing requirements to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/requires.txt
+writing top-level names to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/top_level.txt
+reading manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+writing manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+running build
+running build_py
+copying bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+running install
+running install_lib
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/odometry.py to odometry.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/motor_driver.py to motor_driver.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/parameters.py to parameters.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/encoder_reader.py to encoder_reader.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/pid.py to pid.cpython-310.pyc
+running install_data
+running install_egg_info
+removing '/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/bumperbot_hardware/bumperbot_hardware.egg-info to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info
+running install_scripts
+Installing encoder_reader script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing motor_driver script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing odometry script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing pid script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+writing list of installed files to '/home/pi/bumperbot_ws/build/bumperbot_hardware/install.log'

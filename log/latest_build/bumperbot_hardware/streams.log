@@ -1,0 +1,31 @@
+[3.876s] Invoking command in '/home/pi/bumperbot_ws/src/bumperbot_hardware': PYTHONPATH=/home/pi/bumperbot_ws/build/bumperbot_hardware/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/bumperbot_hardware build --build-base /home/pi/bumperbot_ws/build/bumperbot_hardware/build install --record /home/pi/bumperbot_ws/build/bumperbot_hardware/install.log --single-version-externally-managed install_data
+[5.192s] running egg_info
+[5.195s] writing ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/PKG-INFO
+[5.197s] writing dependency_links to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/dependency_links.txt
+[5.198s] writing entry points to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/entry_points.txt
+[5.201s] writing requirements to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/requires.txt
+[5.202s] writing top-level names to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/top_level.txt
+[5.209s] reading manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+[5.214s] writing manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+[5.215s] running build
+[5.215s] running build_py
+[5.217s] copying bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+[5.219s] running install
+[5.221s] running install_lib
+[5.225s] copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+[5.229s] byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/odometry.py to odometry.cpython-310.pyc
+[5.235s] byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/motor_driver.py to motor_driver.cpython-310.pyc
+[5.238s] byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/parameters.py to parameters.cpython-310.pyc
+[5.241s] byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/encoder_reader.py to encoder_reader.cpython-310.pyc
+[5.244s] byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/pid.py to pid.cpython-310.pyc
+[5.247s] running install_data
+[5.251s] running install_egg_info
+[5.256s] removing '/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info' (and everything under it)
+[5.258s] Copying ../../build/bumperbot_hardware/bumperbot_hardware.egg-info to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info
+[5.265s] running install_scripts
+[5.347s] Installing encoder_reader script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+[5.349s] Installing motor_driver script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+[5.350s] Installing odometry script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+[5.351s] Installing pid script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+[5.355s] writing list of installed files to '/home/pi/bumperbot_ws/build/bumperbot_hardware/install.log'
+[5.484s] Invoked command in '/home/pi/bumperbot_ws/src/bumperbot_hardware' returned '0': PYTHONPATH=/home/pi/bumperbot_ws/build/bumperbot_hardware/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/bumperbot_hardware build --build-base /home/pi/bumperbot_ws/build/bumperbot_hardware/build install --record /home/pi/bumperbot_ws/build/bumperbot_hardware/install.log --single-version-externally-managed install_data

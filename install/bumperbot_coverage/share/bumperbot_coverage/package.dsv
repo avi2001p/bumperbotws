@@ -1,0 +1,6 @@
+source;share/bumperbot_coverage/hook/pythonpath.ps1
+source;share/bumperbot_coverage/hook/pythonpath.dsv
+source;share/bumperbot_coverage/hook/pythonpath.sh
+source;share/bumperbot_coverage/hook/ament_prefix_path.ps1
+source;share/bumperbot_coverage/hook/ament_prefix_path.dsv
+source;share/bumperbot_coverage/hook/ament_prefix_path.sh

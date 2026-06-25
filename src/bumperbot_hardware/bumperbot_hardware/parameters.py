@@ -1,0 +1,129 @@
+"""
+parameters.py
+--------------
+Robot hardware parameters for the BumperBot.
+Updated for 25GA-370/12V/280RPM DC Reducer Gear Encoder Motor.
+"""
+# ==========================================================
+# MOTOR DRIVER (L298N)
+# ==========================================================
+# Right Motor (OUT1 / OUT2)
+RIGHT_EN = 18      # GPIO18 (Physical Pin 12)
+RIGHT_IN1 = 17     # GPIO17 (Physical Pin 11)
+RIGHT_IN2 = 27     # GPIO27 (Physical Pin 13)
+# Left Motor (OUT3 / OUT4)
+LEFT_EN = 19       # GPIO19 (Physical Pin 35)
+LEFT_IN1 = 22      # GPIO22 (Physical Pin 15)
+LEFT_IN2 = 23      # GPIO23 (Physical Pin 16)
+# PWM Settings
+PWM_FREQUENCY = 1000      # Hz
+MAX_PWM = 100             # %
+MIN_PWM = 0               # %
+# ==========================================================
+# ENCODERS (25GA-370 built-in Hall sensor encoder)
+# ==========================================================
+# Left Encoder
+LEFT_ENCODER_A = 6     # GPIO6  (Pin 31)
+LEFT_ENCODER_B = 5     # GPIO5  (Pin 29)
+# Right Encoder
+RIGHT_ENCODER_A = 21   # GPIO21 (Pin 40)
+RIGHT_ENCODER_B = 20   # GPIO20 (Pin 38)
+ENCODER_VOLTAGE = 3.3
+# ==========================================================
+# ROBOT MECHANICAL PARAMETERS
+# ==========================================================
+# Wheel diameter (meters) — 65mm wheels
+WHEEL_DIAMETER = 0.065
+# Wheel radius (meters)
+WHEEL_RADIUS = WHEEL_DIAMETER / 2.0
+# Wheel circumference (meters)
+WHEEL_CIRCUMFERENCE = 3.141592653589793 * WHEEL_DIAMETER
+# Distance between wheel centers (meters) — measured centre to centre
+WHEEL_BASE = 0.229
+# Robot body dimensions (meters)
+ROBOT_WIDTH = 0.220       # 220mm
+ROBOT_LENGTH = 0.187      # 187mm
+# Front wheel motor axle distance from front edge (meters)
+MOTOR_AXLE_FROM_FRONT = 0.07   # 7cm from the front
+# ==========================================================
+# ENCODER PARAMETERS (25GA-370 / 280RPM)
+# Motor: 25GA-370, 12V, 280RPM
+# Built-in Hall sensor encoder: 11 PPR per motor shaft revolution
+# Gear ratio for 280RPM variant: approximately 21.3:1
+# Using GPIO.BOTH on Channel A: 11 * 2 = 22 counts per motor rev
+# Per output shaft (wheel) revolution: 22 * 21.3 ≈ 469
+# >>> CALIBRATE THIS: run calibrate_encoders node and manually
+#     rotate each wheel exactly 1 full revolution to get true count.
+# ==========================================================
+ENCODER_PPR = 11              # Pulses per motor shaft revolution
+GEAR_RATIO = 20.5             # Calibrated gear ratio
+TICKS_PER_REV = 451           # Calibrated ticks per revolution (measured on physical robot)
+# ==========================================================
+# ROBOT SPEED LIMITS
+# ==========================================================
+MAX_LINEAR_SPEED = 0.30      # m/s (conservative for coverage)
+MAX_ANGULAR_SPEED = 2.00     # rad/s
+# ==========================================================
+# PID CONTROLLER
+# ==========================================================
+# Starting gains — tune these on the real robot
+KP = 3.5
+KI = 1.0
+KD = 0.02
+PID_OUTPUT_MIN = -255.0
+PID_OUTPUT_MAX = 255.0
+INTEGRAL_WINDUP_LIMIT = 150.0   # Clamp integral term
+CONTROL_RATE = 20.0             # Hz (control loop frequency)
+MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor static friction
+# ==========================================================
+# ACTUATORS (Water removal system)
+# ==========================================================
+# Vacuum pump relay GPIO (adjust to your wiring)
+VACUUM_PUMP_PIN = 24    # GPIO24 (Physical Pin 18)
+# DC fan relay GPIO (adjust to your wiring)
+DC_FAN_PIN = 25         # GPIO25 (Physical Pin 22)
+# Fan ON duration when water detected (seconds)
+FAN_ON_DURATION = 5.0
+# ==========================================================
+# WATER SENSOR
+# ==========================================================
+# Digital water sensor GPIO (adjust to your wiring)
+WATER_SENSOR_PIN = 16   # GPIO16 (Physical Pin 36)
+# Active level: True = HIGH when water detected
+WATER_SENSOR_ACTIVE_HIGH = True
+# ==========================================================
+# COVERAGE GROUND DIMENSIONS (stadium shape)
+# ==========================================================
+# Width of the ground (diameter of semicircular ends)
+GROUND_WIDTH = 0.6              # meters
+# Length of the straight rectangular section
+GROUND_STRAIGHT_LENGTH = 1.2    # meters
+# Semicircle radius (auto-calculated from width)
+GROUND_SEMICIRCLE_RADIUS = GROUND_WIDTH / 2.0   # 0.3m
+# Total ground length = straight + 2 * semicircle_radius
+GROUND_TOTAL_LENGTH = GROUND_STRAIGHT_LENGTH + 2 * GROUND_SEMICIRCLE_RADIUS
+# Overlap between adjacent passes (meters)
+COVERAGE_OVERLAP = 0.02
+# ==========================================================
+# ROBOT INFORMATION
+# ==========================================================
+ROBOT_NAME = "bumperbot"
+# ==========================================================
+# ROS TOPICS
+# ==========================================================
+CMD_VEL_TOPIC = "/cmd_vel"
+ODOM_TOPIC = "/odom"
+WHEEL_TICKS_TOPIC = "/wheel_ticks"
+WHEEL_SPEED_TOPIC = "/wheel_speed"
+MOTOR_PWM_TOPIC = "/motor_pwm"
+WATER_DETECTED_TOPIC = "/water_detected"
+WATER_CLEANING_TOPIC = "/water_cleaning_active"
+# ==========================================================
+# NODE NAMES
+# ==========================================================
+MOTOR_NODE = "motor_driver"
+ENCODER_NODE = "encoder_reader"
+PID_NODE = "pid_controller"
+ODOMETRY_NODE = "odometry"
+COVERAGE_NODE = "stadium_coverage"
+WATER_ACTUATOR_NODE = "water_actuator"

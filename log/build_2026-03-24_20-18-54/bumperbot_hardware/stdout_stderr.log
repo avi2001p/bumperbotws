@@ -1,0 +1,57 @@
+running egg_info
+creating ../../build/bumperbot_hardware/bumperbot_hardware.egg-info
+writing ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/PKG-INFO
+writing dependency_links to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/dependency_links.txt
+writing entry points to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/entry_points.txt
+writing requirements to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/requires.txt
+writing top-level names to ../../build/bumperbot_hardware/bumperbot_hardware.egg-info/top_level.txt
+writing manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+reading manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+writing manifest file '../../build/bumperbot_hardware/bumperbot_hardware.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/pi/bumperbot_ws/build/bumperbot_hardware/build
+creating /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib
+creating /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/__init__.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/utils.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/odometry.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/parameters.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/encoder_reader.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+copying bumperbot_hardware/pid.py -> /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware
+running install
+running install_lib
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/__init__.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/utils.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/odometry.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/motor_driver.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/parameters.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/encoder_reader.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+copying /home/pi/bumperbot_ws/build/bumperbot_hardware/build/lib/bumperbot_hardware/pid.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/__init__.py to __init__.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/utils.py to utils.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/odometry.py to odometry.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/motor_driver.py to motor_driver.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/parameters.py to parameters.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/encoder_reader.py to encoder_reader.cpython-310.pyc
+byte-compiling /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware/pid.py to pid.cpython-310.pyc
+running install_data
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/share/ament_index
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/share/ament_index/resource_index
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/share/ament_index/resource_index/packages
+copying resource/bumperbot_hardware -> /home/pi/bumperbot_ws/install/bumperbot_hardware/share/ament_index/resource_index/packages
+copying package.xml -> /home/pi/bumperbot_ws/install/bumperbot_hardware/share/bumperbot_hardware
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/share/bumperbot_hardware/launch
+copying launch/hardware.launch.py -> /home/pi/bumperbot_ws/install/bumperbot_hardware/share/bumperbot_hardware/launch
+creating /home/pi/bumperbot_ws/install/bumperbot_hardware/share/bumperbot_hardware/config
+copying config/hardware.yaml -> /home/pi/bumperbot_ws/install/bumperbot_hardware/share/bumperbot_hardware/config
+running install_egg_info
+Copying ../../build/bumperbot_hardware/bumperbot_hardware.egg-info to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/python3.10/site-packages/bumperbot_hardware-0.0.0-py3.10.egg-info
+running install_scripts
+Installing encoder_reader script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing motor_driver script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing odometry script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+Installing pid script to /home/pi/bumperbot_ws/install/bumperbot_hardware/lib/bumperbot_hardware
+writing list of installed files to '/home/pi/bumperbot_ws/build/bumperbot_hardware/install.log'
