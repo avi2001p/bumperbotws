@@ -81,11 +81,13 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # ==========================================================
 # PID CONTROLLER
 # ==========================================================
-# Starting gains — tune these on the real robot.
-# With feed-forward (KFF) doing most of the work, KP/KI only need to TRIM the
-# small remaining error, so they are intentionally gentle to avoid oscillation
-# ("dancing"). Raise slowly if the robot is sluggish to reach speed.
-KP = 1.2
+# Gains — FEED-FORWARD-DOMINANT design.
+# The feed-forward (KFF) sets the base PWM so both wheels turn TOGETHER smoothly.
+# KP is kept very small on purpose: a big KP reacts to the noisy encoder speed
+# and makes the two independent wheel loops oscillate out of phase ("one wheel
+# then the other"). KI slowly trims to the right speed. Straightness is handled
+# by the heading loop (KP_HEADING), not by the per-wheel loops.
+KP = 0.3
 KI = 0.5
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
@@ -106,10 +108,10 @@ CMD_VEL_TIMEOUT = 0.5           # seconds
 # Wheel-speed feedback smoothing (exponential moving average). The Hall
 # encoder speed is noisy/quantized; filtering it stops the PID over-reacting
 # and surging. 0 = no filter (use raw), 1 = instant; lower = smoother.
-SPEED_FILTER_ALPHA = 0.4
+SPEED_FILTER_ALPHA = 0.3
 # Output slew-rate limit (max PWM change per control cycle). Prevents the
 # command jumping 0 -> full -> 0, which causes the "move-stop-move" surging.
-OUTPUT_SLEW_LIMIT = 40.0
+OUTPUT_SLEW_LIMIT = 30.0
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
