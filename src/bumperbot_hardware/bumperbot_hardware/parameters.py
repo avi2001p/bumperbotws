@@ -87,20 +87,18 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # and makes the two independent wheel loops oscillate out of phase ("one wheel
 # then the other"). KI slowly trims to the right speed. Straightness is handled
 # by the heading loop (KP_HEADING), not by the per-wheel loops.
-# PURE CONSTANT FEED-FORWARD design (open-loop) — no P, no I, no D.
-# The feed-forward (KFF) gives each wheel a STEADY constant PWM proportional to
-# the commanded speed, so for straight driving BOTH wheels get the SAME PWM and
-# rotate together. KP=0, KD=0 as before.
-# KI=0 ON PURPOSE: the per-wheel integral is the ONLY term that grows with
-# distance. Each wheel has its OWN integral, and on the noisy/mismatched cheap
-# encoders the two integrals DIVERGE over the first ~2-3 s (~50 cm) — that
-# divergence is what made the robot drive straight at the start and then curve
-# LEFT after ~50 cm. With KI=0 the command is purely deterministic (same PWM
-# every run), so there is nothing to wind up and steer it off line.
-# This is the "constant speed for each motor" baseline. Once it drives straight
-# we can re-add a SMALL KI if we ever need exact speed regulation.
+# FEED-FORWARD + SLOW-INTEGRAL design (no proportional, no derivative).
+# The feed-forward (KFF) gives each wheel a steady base PWM; the integral (KI)
+# slowly trims the stronger/weaker wheel so they MATCH and the robot goes
+# straight. KI=0.5 is the value that gave the good "straight for ~50 cm" run.
+# The late LEFT turn after 50 cm was the integral OVERSHOOTING: the filtered
+# encoder speed lags reality, so the integral keeps winding PAST the balanced
+# point and over-corrects into a left curve. The fix is NOT removing the
+# integral (KI=0 made it curve right from the start) — it is the lower
+# INTEGRAL_WINDUP_LIMIT below, which stops the integral winding far enough to
+# overshoot, so it settles at straight instead of turning left.
 KP = 0.0
-KI = 0.0
+KI = 0.5
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,
@@ -108,19 +106,23 @@ KD = 0.0
 #   KFF ≈ PID_OUTPUT_MAX / (max ticks/sec at MAX_LINEAR_SPEED)
 #       = 255 / ((0.30 / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV) ≈ 0.38
 KFF = 0.38
-# Per-wheel feed-forward TRIM — compensates unequal motors at equal PWM.
-# With pure constant PWM the robot curved RIGHT, which means the LEFT wheel is
-# faster than the RIGHT. We slow the faster (LEFT) wheel down a little so equal
-# command -> equal speed -> straight. 1.0 = no change. Lower LEFT_FF_TRIM (or
-# raise RIGHT_FF_TRIM) until it drives straight. Trimming the FASTER wheel DOWN
-# is preferred so we never hit the PWM ceiling.
-#   curves RIGHT (left too fast) -> lower LEFT_FF_TRIM
-#   curves LEFT  (right too fast) -> lower RIGHT_FF_TRIM
-LEFT_FF_TRIM = 0.92
+# Per-wheel feed-forward TRIM — optional fine balance for unequal motors.
+# Left at 1.0 / 1.0 (NO trim) so the integral does the balancing, same as the
+# original "straight for 50 cm" run. Only touch these if, after tuning the
+# integral, a small steady curve remains:
+#   curves RIGHT (left too fast) -> lower LEFT_FF_TRIM slightly (e.g. 0.97)
+#   curves LEFT  (right too fast) -> lower RIGHT_FF_TRIM slightly
+LEFT_FF_TRIM = 1.0
 RIGHT_FF_TRIM = 1.0
 PID_OUTPUT_MIN = -255.0
 PID_OUTPUT_MAX = 255.0
-INTEGRAL_WINDUP_LIMIT = 150.0   # Clamp integral term
+# Clamp on the per-wheel integral. THIS is the knob that fixes the late LEFT
+# turn: 150 let the integral wind so far it overshot the balanced point (~50 cm
+# straight, then curved left). 50 lets it correct the wheel mismatch but stops
+# it before it overshoots, so it settles straight.
+#   still turns LEFT at the end  -> lower this (40, 30)
+#   never straightens, curves RIGHT the whole way -> raise it (70, 90)
+INTEGRAL_WINDUP_LIMIT = 50.0
 CONTROL_RATE = 20.0             # Hz (control loop frequency)
 MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor static friction
 # Safety watchdog: if no /cmd_vel arrives within this many seconds, the PID
