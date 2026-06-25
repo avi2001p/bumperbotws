@@ -50,11 +50,12 @@ class MotorDriver(Node):
         raw_left  = msg.data[0]
         raw_right = msg.data[1]
 
-        # Log if we are trying to drive (throttle to avoid spam, or just log when it changes)
+        # Log drive commands, throttled to once a second to avoid flooding
         if raw_left != 0.0 or raw_right != 0.0:
-            # We'll log once a second just to be sure
-            pass # Actually let's just log it directly to be absolutely sure it's reaching here
-            self.get_logger().info(f"Motor Driver received PWM -> L: {raw_left}, R: {raw_right}")
+            self.get_logger().info(
+                f"Motor Driver PWM -> L: {raw_left:+.1f}, R: {raw_right:+.1f}",
+                throttle_duration_sec=1.0,
+            )
 
         # Map the 8-bit scale (-255 to 255) to RPi.GPIO Duty Cycle percentages (0 to 100)
         left_pwm_pct  = min((abs(raw_left) / 255.0) * 100.0, 100.0)

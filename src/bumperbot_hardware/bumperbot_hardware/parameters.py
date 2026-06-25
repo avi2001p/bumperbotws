@@ -58,6 +58,16 @@ MOTOR_AXLE_FROM_FRONT = 0.07   # 7cm from the front
 ENCODER_PPR = 11              # Pulses per motor shaft revolution
 GEAR_RATIO = 20.5             # Calibrated gear ratio
 TICKS_PER_REV = 451           # Calibrated ticks per revolution (measured on physical robot)
+# ----------------------------------------------------------
+# ENCODER DIRECTION SIGNS
+# ----------------------------------------------------------
+# Sign applied to each wheel's tick increment so that DRIVING
+# THE ROBOT FORWARD produces POSITIVE ticks on both wheels.
+# >>> Verify on the robot: run encoder_reader, echo /wheel_ticks,
+#     push each wheel forward by hand. If ticks go negative,
+#     flip that wheel's sign to -1 (no other code change needed).
+LEFT_ENCODER_SIGN = +1
+RIGHT_ENCODER_SIGN = +1
 # ==========================================================
 # ROBOT SPEED LIMITS
 # ==========================================================
@@ -70,11 +80,26 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 KP = 3.5
 KI = 1.0
 KD = 0.02
+# Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
+# TRIM the small remaining error instead of building up the whole command,
+# which makes both wheels respond together and drive straight.
+#   KFF ≈ PID_OUTPUT_MAX / (max ticks/sec at MAX_LINEAR_SPEED)
+#       = 255 / ((0.30 / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV) ≈ 0.38
+KFF = 0.38
 PID_OUTPUT_MIN = -255.0
 PID_OUTPUT_MAX = 255.0
 INTEGRAL_WINDUP_LIMIT = 150.0   # Clamp integral term
 CONTROL_RATE = 20.0             # Hz (control loop frequency)
 MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor static friction
+# ----------------------------------------------------------
+# HEADING-HOLD CONTROLLER (straight-line correction)
+# ----------------------------------------------------------
+# P gain that converts heading error (rad) into a correcting angular.z
+# (rad/s) command while driving straight. Higher = snappier correction
+# but can oscillate. Tune on the robot.
+KP_HEADING = 2.0
+# Max correction the heading-hold loop may command (rad/s)
+MAX_HEADING_CORRECTION = 0.6
 # ==========================================================
 # ACTUATORS (Water removal system)
 # ==========================================================
@@ -95,13 +120,13 @@ WATER_SENSOR_ACTIVE_HIGH = True
 # COVERAGE GROUND DIMENSIONS (stadium shape)
 # ==========================================================
 # Width of the ground (diameter of semicircular ends)
-GROUND_WIDTH = 0.6              # meters
+GROUND_WIDTH = 1.2              # meters
 # Length of the straight rectangular section
 GROUND_STRAIGHT_LENGTH = 1.2    # meters
 # Semicircle radius (auto-calculated from width)
-GROUND_SEMICIRCLE_RADIUS = GROUND_WIDTH / 2.0   # 0.3m
+GROUND_SEMICIRCLE_RADIUS = GROUND_WIDTH / 2.0   # 0.6m
 # Total ground length = straight + 2 * semicircle_radius
-GROUND_TOTAL_LENGTH = GROUND_STRAIGHT_LENGTH + 2 * GROUND_SEMICIRCLE_RADIUS
+GROUND_TOTAL_LENGTH = GROUND_STRAIGHT_LENGTH + 2 * GROUND_SEMICIRCLE_RADIUS  # 2.4m
 # Overlap between adjacent passes (meters)
 COVERAGE_OVERLAP = 0.02
 # ==========================================================

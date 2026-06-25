@@ -63,13 +63,17 @@ class Odometry(Node):
         distance    = (left_distance + right_distance) / 2.0
         delta_theta = (right_distance - left_distance) / WHEEL_BASE
 
-        # Update pose
+        # Update pose using the MIDPOINT heading over this step (more accurate
+        # on arcs than integrating x/y with the end-of-step heading).
+        mid_theta = self.theta + delta_theta / 2.0
+        self.x     += distance * math.cos(mid_theta)
+        self.y     += distance * math.sin(mid_theta)
         self.theta += delta_theta
-        self.x     += distance * math.cos(self.theta)
-        self.y     += distance * math.sin(self.theta)
 
+        # Throttled so it doesn't flood the console at 10 Hz
         self.get_logger().info(
-            f"X={self.x:.3f}  Y={self.y:.3f}  Theta={math.degrees(self.theta):.2f} deg"
+            f"X={self.x:.3f}  Y={self.y:.3f}  Theta={math.degrees(self.theta):.2f} deg",
+            throttle_duration_sec=1.0,
         )
 
         now = self.get_clock().now().to_msg()

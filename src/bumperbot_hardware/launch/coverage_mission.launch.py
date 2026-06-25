@@ -65,7 +65,9 @@ def generate_launch_description():
         launch_arguments={
             "serial_port": "/dev/ttyUSB0",
             "serial_baudrate": "460800",
-            "frame_id": "laser_link",
+            # Must match the static TF child frame (base_link -> laser) published
+            # in hardware.launch.py, or SLAM cannot transform the scan.
+            "frame_id": "laser",
         }.items(),
     )
 
@@ -109,7 +111,8 @@ def generate_launch_description():
             "linear_speed": LaunchConfiguration("linear_speed"),
             "auto_start": True,
             "use_lidar_safety": True,
-            "safety_distance": 0.30,
+            "safety_distance": 0.18,
+            "safety_cone_deg": 20.0,
         }],
     )
 

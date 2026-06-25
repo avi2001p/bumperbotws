@@ -1,7 +1,7 @@
 # =============================================================
 # SLAM Toolbox Configuration for BumperBot
 # Tuned for RPLiDAR C1 on a small stadium-shaped arena
-# (1.8m × 0.6m prototype cricket ground)
+# (2.4m long × 1.2m wide prototype cricket ground; diagonal ~2.7m)
 # =============================================================
 slam_toolbox:
   ros__parameters:
@@ -41,10 +41,10 @@ slam_toolbox:
     minimum_travel_distance: 0.05
     minimum_travel_heading: 0.1
     scan_buffer_size: 10
-    scan_buffer_maximum_scan_distance: 2.0
+    scan_buffer_maximum_scan_distance: 3.0
     link_match_minimum_response_fine: 0.1
-    link_scan_maximum_distance: 1.5
-    loop_search_maximum_distance: 2.0
+    link_scan_maximum_distance: 2.0
+    loop_search_maximum_distance: 3.0
     do_loop_closing: true
     loop_match_minimum_chain_size: 3
     loop_match_maximum_variance_coarse: 3.0

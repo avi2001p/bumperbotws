@@ -1,3 +1,0 @@
-[console_scripts]
-spiral_coverage = bumperbot_coverage.spiral_coverage:main
-

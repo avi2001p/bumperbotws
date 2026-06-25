@@ -57,12 +57,12 @@ class PIDController(Node):
 
         # PID internal state — left wheel
         self.left_integral = 0.0
-        self.left_prev_error = 0.0
+        self.left_prev_actual = 0.0   # for derivative-on-measurement
         self.left_output = 0.0
 
         # PID internal state — right wheel
         self.right_integral = 0.0
-        self.right_prev_error = 0.0
+        self.right_prev_actual = 0.0  # for derivative-on-measurement
         self.right_output = 0.0
 
         # Control loop period
@@ -134,10 +134,10 @@ class PIDController(Node):
         self.left_speed = msg.data[0]
         self.right_speed = msg.data[1]
 
-    def compute_pid(self, target, actual, prev_error, integral):
+    def compute_pid(self, target, actual, prev_actual, integral):
         """
-        Compute PID output for one wheel.
-        Returns: (output, new_prev_error, new_integral)
+        Compute feed-forward + PID output for one wheel.
+        Returns: (output, new_prev_actual, new_integral)
         """
         # Re-read params for live tuning
         kp = self.get_parameter("kp").get_parameter_value().double_value
@@ -145,6 +145,10 @@ class PIDController(Node):
         kd = self.get_parameter("kd").get_parameter_value().double_value
 
         error = target - actual
+
+        # Feed-forward: baseline PWM proportional to the target speed so both
+        # wheels move together immediately and the PID only trims the error.
+        ff_term = KFF * target
 
         # Proportional
         p_term = kp * error
@@ -154,15 +158,16 @@ class PIDController(Node):
         integral = max(-INTEGRAL_WINDUP_LIMIT, min(INTEGRAL_WINDUP_LIMIT, integral))
         i_term = ki * integral
 
-        # Derivative
-        derivative = (error - prev_error) / self.dt
+        # Derivative on MEASUREMENT (not error) — avoids the spike when the
+        # setpoint changes. d(error)/dt = -d(actual)/dt for a constant target.
+        derivative = -(actual - prev_actual) / self.dt
         d_term = kd * derivative
 
         # Combined output, clamped
-        output = p_term + i_term + d_term
+        output = ff_term + p_term + i_term + d_term
         output = max(PID_OUTPUT_MIN, min(PID_OUTPUT_MAX, output))
 
-        return output, error, integral
+        return output, actual, integral
 
     def control_loop(self):
         """Run PID computation and publish motor PWM commands."""
@@ -173,25 +178,25 @@ class PIDController(Node):
             self.right_output = 0.0
             self.left_integral = 0.0
             self.right_integral = 0.0
-            self.left_prev_error = 0.0
-            self.right_prev_error = 0.0
+            self.left_prev_actual = self.left_speed
+            self.right_prev_actual = self.right_speed
         else:
             # PID for left wheel
-            self.left_output, self.left_prev_error, self.left_integral = (
+            self.left_output, self.left_prev_actual, self.left_integral = (
                 self.compute_pid(
                     self.target_left_speed,
                     self.left_speed,
-                    self.left_prev_error,
+                    self.left_prev_actual,
                     self.left_integral
                 )
             )
 
             # PID for right wheel
-            self.right_output, self.right_prev_error, self.right_integral = (
+            self.right_output, self.right_prev_actual, self.right_integral = (
                 self.compute_pid(
                     self.target_right_speed,
                     self.right_speed,
-                    self.right_prev_error,
+                    self.right_prev_actual,
                     self.right_integral
                 )
             )
@@ -206,10 +211,19 @@ class PIDController(Node):
 
     def print_status(self):
 
+        # Diagnostic hint for the common "output stuck at 0.0" case
+        if self.target_left_speed == 0.0 and self.target_right_speed == 0.0:
+            hint = "  [target=0 → no /cmd_vel reaching PID]"
+        elif self.left_speed == 0.0 and self.right_speed == 0.0:
+            hint = "  [actual=0 → no /wheel_speed feedback (check encoders)]"
+        else:
+            hint = ""
+
         self.get_logger().info(
             f"PID | "
             f"L: tgt={self.target_left_speed:+7.1f} act={self.left_speed:+7.1f} out={self.left_output:+7.1f} | "
             f"R: tgt={self.target_right_speed:+7.1f} act={self.right_speed:+7.1f} out={self.right_output:+7.1f}"
+            f"{hint}"
         )
 
 

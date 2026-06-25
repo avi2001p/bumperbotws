@@ -37,7 +37,6 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
-from tf_transformations import euler_from_quaternion
 
 from bumperbot_hardware.parameters import (
     GROUND_WIDTH,
@@ -49,7 +48,17 @@ from bumperbot_hardware.parameters import (
     CMD_VEL_TOPIC,
     ODOM_TOPIC,
     WATER_CLEANING_TOPIC,
+    KP_HEADING,
+    MAX_HEADING_CORRECTION,
 )
+
+
+def yaw_from_quaternion(q):
+    """Extract yaw (rad) from a list/tuple [x, y, z, w]."""
+    x, y, z, w = q
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
 
 
 # === Segment types for the path ===
@@ -78,7 +87,12 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
         self.declare_parameter("use_lidar_safety", True)
-        self.declare_parameter("safety_distance", 0.30)  # meters
+        # Emergency-stop distance for a HEAD-ON obstacle. Kept small so the
+        # arena's side walls (~0.6 m away) don't trip a permanent pause.
+        self.declare_parameter("safety_distance", 0.18)  # meters
+        # Half-angle of the forward emergency cone (degrees). Narrow so only a
+        # genuine obstacle directly ahead stops the robot, not nearby walls.
+        self.declare_parameter("safety_cone_deg", 20.0)
 
         self.ground_w = self.get_parameter("ground_width").value
         self.ground_sl = self.get_parameter("ground_straight_length").value
@@ -88,6 +102,9 @@ class StadiumCoverageNode(Node):
         auto_start = self.get_parameter("auto_start").value
         self.use_lidar = self.get_parameter("use_lidar_safety").value
         self.safety_distance = self.get_parameter("safety_distance").value
+        self.safety_cone = math.radians(
+            self.get_parameter("safety_cone_deg").value
+        )
 
         self.semicircle_r = self.ground_w / 2.0
 
@@ -225,7 +242,7 @@ class StadiumCoverageNode(Node):
             msg.pose.pose.orientation.z,
             msg.pose.pose.orientation.w
         ]
-        _, _, self.theta = euler_from_quaternion(q)
+        self.theta = yaw_from_quaternion(q)
 
         if not self.odom_received:
             self.odom_received = True
@@ -254,13 +271,13 @@ class StadiumCoverageNode(Node):
             angle = angle_min + idx * angle_increment
             angle = self.normalize_angle(angle)
 
-            # Check a 120-degree cone in the forward direction.
-            # Due to URDF joint definition, the front of the robot is at angle ~pi and -pi
-            # in the Lidar coordinate frame.
-            if abs(angle) > 2.0 * math.pi / 3.0:  # within 60 degrees of front center
-                if r < self.safety_distance:
-                    obstacle_found = True
-                    break
+            # The lidar is mounted yaw=3.14 (URDF), so the ROBOT-FORWARD
+            # direction corresponds to lidar angle ±pi. A ray is in the
+            # forward emergency cone when it is within `safety_cone` of ±pi.
+            angle_from_front = math.pi - abs(angle)
+            if angle_from_front < self.safety_cone and r < self.safety_distance:
+                obstacle_found = True
+                break
 
         self.obstacle_detected = obstacle_found
 
@@ -373,10 +390,16 @@ class StadiumCoverageNode(Node):
             self.stop_robot()
             return True
 
-        # Drive forward
+        # Drive forward, holding the heading we started the segment with so the
+        # robot tracks a straight line instead of trusting raw wheel matching.
+        heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
+        correction = -KP_HEADING * heading_error
+        correction = max(-MAX_HEADING_CORRECTION,
+                         min(MAX_HEADING_CORRECTION, correction))
+
         twist = Twist()
         twist.linear.x = self.linear_speed
-        twist.angular.z = 0.0
+        twist.angular.z = correction
         self.cmd_vel_pub.publish(twist)
         return False
 

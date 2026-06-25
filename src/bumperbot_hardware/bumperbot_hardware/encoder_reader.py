@@ -81,7 +81,7 @@ class EncoderReader(Node):
             bouncetime=1
         )
 
-        # Publish at 10 Hz
+        # Publish at CONTROL_RATE (20 Hz) — must match the PID loop period
         self.dt = 1.0 / CONTROL_RATE
 
         self.timer = self.create_timer(
@@ -90,25 +90,22 @@ class EncoderReader(Node):
         )
 
     def left_callback(self, channel):
-        """Left encoder interrupt — determine direction from Channel B."""
+        """Left encoder interrupt — direction from the A/B phase relationship."""
         a_state = GPIO.input(LEFT_ENCODER_A)
         b_state = GPIO.input(LEFT_ENCODER_B)
-        # When A and B are the same → forward; different → reverse
-        # (Adjust sign if wheel spins the wrong way)
-        if a_state == b_state:
-            self.left_ticks += 1
-        else:
-            self.left_ticks -= 1
+        # Base quadrature decode: A==B → one direction, A!=B → the other.
+        # LEFT_ENCODER_SIGN (parameters.py) flips it so FORWARD = positive.
+        step = 1 if a_state == b_state else -1
+        self.left_ticks += LEFT_ENCODER_SIGN * step
 
     def right_callback(self, channel):
-        """Right encoder interrupt — determine direction from Channel B."""
+        """Right encoder interrupt — direction from the A/B phase relationship."""
         a_state = GPIO.input(RIGHT_ENCODER_A)
         b_state = GPIO.input(RIGHT_ENCODER_B)
-        # Right motor is mirrored, so direction logic is inverted
-        if a_state != b_state:
-            self.right_ticks += 1
-        else:
-            self.right_ticks -= 1
+        # Same base decode as the left; RIGHT_ENCODER_SIGN handles the
+        # mirrored mounting so that FORWARD = positive on both wheels.
+        step = 1 if a_state == b_state else -1
+        self.right_ticks += RIGHT_ENCODER_SIGN * step
 
     def publish_data(self):
 
