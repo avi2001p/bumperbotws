@@ -87,13 +87,20 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # and makes the two independent wheel loops oscillate out of phase ("one wheel
 # then the other"). KI slowly trims to the right speed. Straightness is handled
 # by the heading loop (KP_HEADING), not by the per-wheel loops.
-# FEED-FORWARD + SLOW-INTEGRAL design (no proportional, no cross-sync).
-# The feed-forward (KFF) gives each wheel a STEADY constant PWM so it rotates
-# smoothly (no stop-start). KP=0 on purpose: any proportional term reacts to the
-# noisy encoder speed and makes the motors twitch/alternate. KI alone slowly and
-# SMOOTHLY trims the weaker wheel up to the commanded speed over ~2 s.
+# PURE CONSTANT FEED-FORWARD design (open-loop) — no P, no I, no D.
+# The feed-forward (KFF) gives each wheel a STEADY constant PWM proportional to
+# the commanded speed, so for straight driving BOTH wheels get the SAME PWM and
+# rotate together. KP=0, KD=0 as before.
+# KI=0 ON PURPOSE: the per-wheel integral is the ONLY term that grows with
+# distance. Each wheel has its OWN integral, and on the noisy/mismatched cheap
+# encoders the two integrals DIVERGE over the first ~2-3 s (~50 cm) — that
+# divergence is what made the robot drive straight at the start and then curve
+# LEFT after ~50 cm. With KI=0 the command is purely deterministic (same PWM
+# every run), so there is nothing to wind up and steer it off line.
+# This is the "constant speed for each motor" baseline. Once it drives straight
+# we can re-add a SMALL KI if we ever need exact speed regulation.
 KP = 0.0
-KI = 0.5
+KI = 0.0
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,
@@ -130,7 +137,12 @@ K_SYNC = 0.0
 # PI heading controller. KP reacts to the current heading error; KI accumulates
 # it to cancel a CONSTANT bias (e.g. one wheel slightly weaker from weight
 # imbalance) that a P-only controller would leave as a permanent slight turn.
-KP_HEADING = 1.0
+# DISABLED (0.0): the heading-hold steers off wheel-odometry heading, which is
+# biased and DRIFTS over distance — after ~50 cm the accumulated bias makes it
+# steer the robot left even when it's physically straight. With the caster fixed
+# and wheels balanced, no odometry steering is better than wrong steering.
+# Re-enable only with a real heading sensor (IMU gyro).
+KP_HEADING = 0.0
 # Cross-track gain: steers back onto the line using odometry X/Y offset.
 # DISABLED (0.0) on purpose: odometry heading/position on this robot is too
 # noisy/biased (mismatched cheap encoders) for cross-track — correcting hard off

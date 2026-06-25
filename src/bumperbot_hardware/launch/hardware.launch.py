@@ -48,7 +48,8 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "kp": 0.0,
-            "ki": 0.5,
+            "ki": 0.0,   # pure constant feed-forward — no integral wind-up that
+                          # diverges between wheels and curves it left after ~50 cm
             "kd": 0.0,
         }],
     )
