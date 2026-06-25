@@ -129,7 +129,13 @@ class DriveStraightTest(Node):
         self.cmd_pub.publish(twist)
 
     def stop(self):
-        self.cmd_pub.publish(Twist())
+        # Guard against publishing while the context is already shutting down
+        # (e.g. on Ctrl+C), which raises RCLError.
+        try:
+            if rclpy.ok():
+                self.cmd_pub.publish(Twist())
+        except Exception:
+            pass
 
 
 def main(args=None):

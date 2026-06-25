@@ -19,6 +19,11 @@ LEFT_IN2 = 23      # GPIO23 (Physical Pin 16)
 PWM_FREQUENCY = 1000      # Hz
 MAX_PWM = 100             # %
 MIN_PWM = 0               # %
+# Motor direction signs: set a motor to -1 if a POSITIVE command makes that
+# wheel spin BACKWARD (i.e. the motor leads are wired reversed). This flips
+# the H-bridge direction in software instead of re-wiring.
+LEFT_MOTOR_SIGN = +1
+RIGHT_MOTOR_SIGN = +1
 # ==========================================================
 # ENCODERS (25GA-370 built-in Hall sensor encoder)
 # ==========================================================
@@ -67,7 +72,7 @@ TICKS_PER_REV = 451           # Calibrated ticks per revolution (measured on phy
 #     push each wheel forward by hand. If ticks go negative,
 #     flip that wheel's sign to -1 (no other code change needed).
 LEFT_ENCODER_SIGN = +1
-RIGHT_ENCODER_SIGN = +1
+RIGHT_ENCODER_SIGN = -1   # right encoder reads reversed on this robot (verified)
 # ==========================================================
 # ROBOT SPEED LIMITS
 # ==========================================================
@@ -91,6 +96,10 @@ PID_OUTPUT_MAX = 255.0
 INTEGRAL_WINDUP_LIMIT = 150.0   # Clamp integral term
 CONTROL_RATE = 20.0             # Hz (control loop frequency)
 MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor static friction
+# Safety watchdog: if no /cmd_vel arrives within this many seconds, the PID
+# zeroes its targets so the robot stops (prevents runaway if the commander
+# node dies or is Ctrl+C'd).
+CMD_VEL_TIMEOUT = 0.5           # seconds
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------

@@ -68,6 +68,9 @@ class PIDController(Node):
         # Control loop period
         self.dt = 1.0 / CONTROL_RATE
 
+        # Safety watchdog — last time a /cmd_vel was received
+        self.last_cmd_time = self.get_clock().now()
+
         # --- Subscribers ---
         self.create_subscription(
             Twist,
@@ -104,6 +107,7 @@ class PIDController(Node):
 
     def cmd_vel_callback(self, msg):
         """Convert desired robot velocity to per-wheel target speeds."""
+        self.last_cmd_time = self.get_clock().now()
         self.linear_x = msg.linear.x
         self.angular_z = msg.angular.z
 
@@ -171,6 +175,13 @@ class PIDController(Node):
 
     def control_loop(self):
         """Run PID computation and publish motor PWM commands."""
+
+        # Safety watchdog: if no /cmd_vel has arrived recently, force a stop so
+        # the robot can't run away when the commanding node dies or is killed.
+        elapsed = (self.get_clock().now() - self.last_cmd_time).nanoseconds / 1e9
+        if elapsed > CMD_VEL_TIMEOUT:
+            self.target_left_speed = 0.0
+            self.target_right_speed = 0.0
 
         # If no velocity commanded, stop immediately (no PID needed)
         if self.target_left_speed == 0.0 and self.target_right_speed == 0.0:

@@ -46,9 +46,11 @@ class MotorDriver(Node):
     def motor_pwm_callback(self, msg):
         self.last_cmd_time = self.get_clock().now()
 
-        # Extract target control signals from the incoming PID array
-        raw_left  = msg.data[0]
-        raw_right = msg.data[1]
+        # Extract target control signals from the incoming PID array and apply
+        # the configured motor-direction signs (flip a reversed-wired motor in
+        # software instead of swapping its leads).
+        raw_left  = msg.data[0] * LEFT_MOTOR_SIGN
+        raw_right = msg.data[1] * RIGHT_MOTOR_SIGN
 
         # Log drive commands, throttled to once a second to avoid flooding
         if raw_left != 0.0 or raw_right != 0.0:
