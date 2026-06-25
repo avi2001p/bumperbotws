@@ -87,12 +87,13 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # and makes the two independent wheel loops oscillate out of phase ("one wheel
 # then the other"). KI slowly trims to the right speed. Straightness is handled
 # by the heading loop (KP_HEADING), not by the per-wheel loops.
-KP = 0.3
-# KI is the term that EQUALIZES the two wheels: it boosts the weaker/slower
-# wheel's PWM until it reaches the commanded speed, so both wheels match and the
-# robot tracks straight. Kept reasonably strong; KP stays low so it stays smooth
-# (it was a high KP, not KI, that caused the earlier jerking).
-KI = 0.6
+# FEED-FORWARD + SLOW-INTEGRAL design (no proportional, no cross-sync).
+# The feed-forward (KFF) gives each wheel a STEADY constant PWM so it rotates
+# smoothly (no stop-start). KP=0 on purpose: any proportional term reacts to the
+# noisy encoder speed and makes the motors twitch/alternate. KI alone slowly and
+# SMOOTHLY trims the weaker wheel up to the commanded speed over ~2 s.
+KP = 0.0
+KI = 0.5
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,
@@ -112,16 +113,17 @@ CMD_VEL_TIMEOUT = 0.5           # seconds
 # Wheel-speed feedback smoothing (exponential moving average). The Hall
 # encoder speed is noisy/quantized; filtering it stops the PID over-reacting
 # and surging. 0 = no filter (use raw), 1 = instant; lower = smoother.
-SPEED_FILTER_ALPHA = 0.25
+SPEED_FILTER_ALPHA = 0.2
 # Output slew-rate limit (max PWM change per control cycle). Prevents the
 # command jumping 0 -> full -> 0, which causes the "move-stop-move" surging.
 OUTPUT_SLEW_LIMIT = 30.0
 # Cross-coupling / wheel-synchronisation gain. Directly drives the ACTUAL
 # left-right speed difference to the INTENDED difference, so for straight
 # driving both wheels are forced to the SAME speed even if one motor is weaker.
-# This is what keeps the two wheels "locked together". Raise for tighter
-# matching, lower if the wheels start fighting/oscillating.
-K_SYNC = 0.4
+# This is what keeps the two wheels "locked together". DISABLED (0.0): with the
+# noisy encoder speed it ping-pongs power between the wheels = the "one then the
+# other" alternating. Leave at 0 unless the speed feedback is well filtered.
+K_SYNC = 0.0
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
