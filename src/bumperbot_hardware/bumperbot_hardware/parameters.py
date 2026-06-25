@@ -88,7 +88,7 @@ MAX_ANGULAR_SPEED = 2.00     # rad/s
 # then the other"). KI slowly trims to the right speed. Straightness is handled
 # by the heading loop (KP_HEADING), not by the per-wheel loops.
 KP = 0.3
-KI = 0.5
+KI = 0.3
 KD = 0.0
 # Feed-forward gain: baseline PWM per target tick/sec. The PID only has to
 # TRIM the small remaining error instead of building up the whole command,
@@ -108,19 +108,22 @@ CMD_VEL_TIMEOUT = 0.5           # seconds
 # Wheel-speed feedback smoothing (exponential moving average). The Hall
 # encoder speed is noisy/quantized; filtering it stops the PID over-reacting
 # and surging. 0 = no filter (use raw), 1 = instant; lower = smoother.
-SPEED_FILTER_ALPHA = 0.3
+SPEED_FILTER_ALPHA = 0.25
 # Output slew-rate limit (max PWM change per control cycle). Prevents the
 # command jumping 0 -> full -> 0, which causes the "move-stop-move" surging.
 OUTPUT_SLEW_LIMIT = 30.0
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
-# P gain that converts heading error (rad) into a correcting angular.z
-# (rad/s) command while driving straight. Higher = snappier correction
-# but can oscillate/wiggle. Tune on the robot.
-KP_HEADING = 1.0
+# PI heading controller. KP reacts to the current heading error; KI accumulates
+# it to cancel a CONSTANT bias (e.g. one wheel slightly weaker from weight
+# imbalance) that a P-only controller would leave as a permanent slight turn.
+KP_HEADING = 1.2
+KI_HEADING = 0.4
 # Max correction the heading-hold loop may command (rad/s)
 MAX_HEADING_CORRECTION = 0.6
+# Clamp on the heading integral (rad·s) to prevent windup
+HEADING_INTEGRAL_LIMIT = 0.6
 # ==========================================================
 # ACTUATORS (Water removal system)
 # ==========================================================

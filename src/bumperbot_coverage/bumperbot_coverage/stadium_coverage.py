@@ -49,7 +49,9 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     WATER_CLEANING_TOPIC,
     KP_HEADING,
+    KI_HEADING,
     MAX_HEADING_CORRECTION,
+    HEADING_INTEGRAL_LIMIT,
 )
 
 
@@ -125,6 +127,7 @@ class StadiumCoverageNode(Node):
         self.segment_start_x = 0.0
         self.segment_start_y = 0.0
         self.segment_start_theta = 0.0
+        self.heading_integral = 0.0
 
         # --- Publishers / Subscribers ---
         self.cmd_vel_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
@@ -373,6 +376,8 @@ class StadiumCoverageNode(Node):
         self.segment_start_x = self.x
         self.segment_start_y = self.y
         self.segment_start_theta = self.theta
+        # Reset heading integral so each straight starts clean
+        self.heading_integral = 0.0
 
     def execute_straight(self, params):
         """
@@ -390,10 +395,16 @@ class StadiumCoverageNode(Node):
             self.stop_robot()
             return True
 
-        # Drive forward, holding the heading we started the segment with so the
-        # robot tracks a straight line instead of trusting raw wheel matching.
+        # PI heading-hold: hold the heading we started the segment with. The
+        # integral cancels a constant bias (one wheel weaker) that a P-only
+        # controller would leave as a permanent slight turn.
         heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
-        correction = -KP_HEADING * heading_error
+        self.heading_integral += heading_error * 0.05  # control loop is 20 Hz
+        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                    min(HEADING_INTEGRAL_LIMIT,
+                                        self.heading_integral))
+        correction = -(KP_HEADING * heading_error
+                       + KI_HEADING * self.heading_integral)
         correction = max(-MAX_HEADING_CORRECTION,
                          min(MAX_HEADING_CORRECTION, correction))
 

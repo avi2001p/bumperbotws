@@ -32,7 +32,9 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     MAX_LINEAR_SPEED,
     KP_HEADING,
+    KI_HEADING,
     MAX_HEADING_CORRECTION,
+    HEADING_INTEGRAL_LIMIT,
 )
 
 
@@ -72,6 +74,8 @@ class DriveStraightTest(Node):
         self.start_x = None
         self.start_y = None
         self.start_theta = 0.0
+        self.heading_integral = 0.0
+        self.dt = 0.05
         self.finished = False
 
         # --- ROS interfaces ---
@@ -117,9 +121,15 @@ class DriveStraightTest(Node):
             )
             return
 
-        # Heading-hold: correct any drift from the initial heading
+        # PI heading-hold: P reacts to drift, I cancels a constant bias (one
+        # wheel weaker) that would otherwise leave a permanent slight turn.
         heading_error = normalize_angle(self.theta - self.start_theta)
-        correction = -self.heading_gain * heading_error
+        self.heading_integral += heading_error * self.dt
+        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                    min(HEADING_INTEGRAL_LIMIT,
+                                        self.heading_integral))
+        correction = -(self.heading_gain * heading_error
+                       + KI_HEADING * self.heading_integral)
         correction = max(-MAX_HEADING_CORRECTION,
                          min(MAX_HEADING_CORRECTION, correction))
 
