@@ -52,6 +52,7 @@ from bumperbot_hardware.parameters import (
     KI_HEADING,
     MAX_HEADING_CORRECTION,
     HEADING_INTEGRAL_LIMIT,
+    HEADING_DEADBAND,
 )
 
 
@@ -395,24 +396,36 @@ class StadiumCoverageNode(Node):
             self.stop_robot()
             return True
 
-        # PI heading-hold: hold the heading we started the segment with. The
-        # integral cancels a constant bias (one wheel weaker) that a P-only
-        # controller would leave as a permanent slight turn.
-        heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
-        self.heading_integral += heading_error * 0.05  # control loop is 20 Hz
-        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
-                                    min(HEADING_INTEGRAL_LIMIT,
-                                        self.heading_integral))
-        correction = -(KP_HEADING * heading_error
-                       + KI_HEADING * self.heading_integral)
-        correction = max(-MAX_HEADING_CORRECTION,
-                         min(MAX_HEADING_CORRECTION, correction))
-
         twist = Twist()
         twist.linear.x = self.linear_speed
-        twist.angular.z = correction
+        twist.angular.z = self.heading_correction()
         self.cmd_vel_pub.publish(twist)
         return False
+
+    def heading_correction(self):
+        """Gentle, windup-proof PI heading-hold for the current straight."""
+        heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
+
+        # Deadband: ignore tiny errors so odometry noise near straight doesn't
+        # cause constant twitchy steering, and let the integral relax.
+        if abs(heading_error) < HEADING_DEADBAND:
+            self.heading_integral *= 0.9
+            return 0.0
+
+        correction = -(KP_HEADING * heading_error
+                       + KI_HEADING * self.heading_integral)
+
+        # Anti-windup: only accumulate the integral while NOT saturated.
+        if abs(correction) < MAX_HEADING_CORRECTION:
+            self.heading_integral += heading_error * 0.05  # 20 Hz loop
+            self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                        min(HEADING_INTEGRAL_LIMIT,
+                                            self.heading_integral))
+            correction = -(KP_HEADING * heading_error
+                           + KI_HEADING * self.heading_integral)
+
+        return max(-MAX_HEADING_CORRECTION,
+                   min(MAX_HEADING_CORRECTION, correction))
 
     def execute_arc(self, params):
         """

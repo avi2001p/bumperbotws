@@ -119,11 +119,14 @@ OUTPUT_SLEW_LIMIT = 30.0
 # it to cancel a CONSTANT bias (e.g. one wheel slightly weaker from weight
 # imbalance) that a P-only controller would leave as a permanent slight turn.
 KP_HEADING = 1.2
-KI_HEADING = 0.4
+KI_HEADING = 0.2
 # Max correction the heading-hold loop may command (rad/s)
 MAX_HEADING_CORRECTION = 0.6
 # Clamp on the heading integral (rad·s) to prevent windup
-HEADING_INTEGRAL_LIMIT = 0.6
+HEADING_INTEGRAL_LIMIT = 0.5
+# Heading deadband (rad): below this error we command NO correction, so tiny
+# odometry noise near straight doesn't cause constant twitchy micro-steering.
+HEADING_DEADBAND = 0.015   # ~0.9 degrees
 # ==========================================================
 # ACTUATORS (Water removal system)
 # ==========================================================

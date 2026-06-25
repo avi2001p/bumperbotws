@@ -35,6 +35,7 @@ from bumperbot_hardware.parameters import (
     KI_HEADING,
     MAX_HEADING_CORRECTION,
     HEADING_INTEGRAL_LIMIT,
+    HEADING_DEADBAND,
 )
 
 
@@ -60,7 +61,9 @@ class DriveStraightTest(Node):
 
         # --- Parameters ---
         self.declare_parameter("distance", 1.0)          # meters to travel
-        self.declare_parameter("speed", 0.12)            # m/s (gentle for testing)
+        # 0.18 m/s keeps the motors out of the low-speed stick-slip zone so they
+        # run smoothly (very slow speeds stutter). Lower only if space is tight.
+        self.declare_parameter("speed", 0.18)            # m/s
         self.declare_parameter("heading_gain", KP_HEADING)
 
         self.target_distance = self.get_parameter("distance").value
@@ -121,22 +124,35 @@ class DriveStraightTest(Node):
             )
             return
 
-        # PI heading-hold: P reacts to drift, I cancels a constant bias (one
-        # wheel weaker) that would otherwise leave a permanent slight turn.
-        heading_error = normalize_angle(self.theta - self.start_theta)
-        self.heading_integral += heading_error * self.dt
-        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
-                                    min(HEADING_INTEGRAL_LIMIT,
-                                        self.heading_integral))
-        correction = -(self.heading_gain * heading_error
-                       + KI_HEADING * self.heading_integral)
-        correction = max(-MAX_HEADING_CORRECTION,
-                         min(MAX_HEADING_CORRECTION, correction))
-
         twist = Twist()
         twist.linear.x = self.speed
-        twist.angular.z = correction
+        twist.angular.z = self.heading_correction()
         self.cmd_pub.publish(twist)
+
+    def heading_correction(self):
+        """Gentle, windup-proof PI heading-hold → angular.z (rad/s)."""
+        heading_error = normalize_angle(self.theta - self.start_theta)
+
+        # Deadband: ignore tiny errors so odometry noise near straight doesn't
+        # cause constant twitchy steering, and let the integral relax.
+        if abs(heading_error) < HEADING_DEADBAND:
+            self.heading_integral *= 0.9
+            return 0.0
+
+        correction = -(self.heading_gain * heading_error
+                       + KI_HEADING * self.heading_integral)
+
+        # Anti-windup: only accumulate the integral while NOT saturated.
+        if abs(correction) < MAX_HEADING_CORRECTION:
+            self.heading_integral += heading_error * self.dt
+            self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                        min(HEADING_INTEGRAL_LIMIT,
+                                            self.heading_integral))
+            correction = -(self.heading_gain * heading_error
+                           + KI_HEADING * self.heading_integral)
+
+        return max(-MAX_HEADING_CORRECTION,
+                   min(MAX_HEADING_CORRECTION, correction))
 
     def stop(self):
         # Guard against publishing while the context is already shutting down
