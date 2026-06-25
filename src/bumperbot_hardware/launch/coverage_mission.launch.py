@@ -15,9 +15,10 @@ Usage:
   ros2 launch bumperbot_hardware coverage_mission.launch.py use_mapping:=false
 
 Optional arguments:
-  ground_width:=0.6  ground_straight_length:=1.2  linear_speed:=0.08
-  kp:=2.0  ki:=0.5  kd:=0.05
+  ground_width:=1.2  ground_straight_length:=1.2  linear_speed:=0.08
   use_mapping:=true  (enable/disable SLAM mapping)
+
+Note: PID gains are set in hardware.launch.py / parameters.py, not here.
 """
 
 import os
@@ -32,10 +33,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
 
     # === Launch arguments ===
-    kp_arg = DeclareLaunchArgument("kp", default_value="2.0")
-    ki_arg = DeclareLaunchArgument("ki", default_value="0.5")
-    kd_arg = DeclareLaunchArgument("kd", default_value="0.05")
-    ground_width_arg = DeclareLaunchArgument("ground_width", default_value="0.6")
+    ground_width_arg = DeclareLaunchArgument("ground_width", default_value="1.2")
     ground_straight_arg = DeclareLaunchArgument(
         "ground_straight_length", default_value="1.2"
     )
@@ -117,9 +115,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        kp_arg,
-        ki_arg,
-        kd_arg,
         ground_width_arg,
         ground_straight_arg,
         linear_speed_arg,

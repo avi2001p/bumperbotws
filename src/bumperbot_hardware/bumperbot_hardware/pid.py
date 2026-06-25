@@ -134,9 +134,10 @@ class PIDController(Node):
         ) * TICKS_PER_REV
 
     def speed_callback(self, msg):
-        """Receive actual wheel speeds from encoder reader."""
-        self.left_speed = msg.data[0]
-        self.right_speed = msg.data[1]
+        """Receive actual wheel speeds and low-pass filter them (EMA)."""
+        a = SPEED_FILTER_ALPHA
+        self.left_speed = a * msg.data[0] + (1.0 - a) * self.left_speed
+        self.right_speed = a * msg.data[1] + (1.0 - a) * self.right_speed
 
     def compute_pid(self, target, actual, prev_actual, integral):
         """
@@ -183,6 +184,15 @@ class PIDController(Node):
 
         return output, actual, integral
 
+    def _slew_limit(self, prev, target_out):
+        """Limit how fast the output may change between control cycles."""
+        delta = target_out - prev
+        if delta > OUTPUT_SLEW_LIMIT:
+            return prev + OUTPUT_SLEW_LIMIT
+        if delta < -OUTPUT_SLEW_LIMIT:
+            return prev - OUTPUT_SLEW_LIMIT
+        return target_out
+
     def control_loop(self):
         """Run PID computation and publish motor PWM commands."""
 
@@ -202,8 +212,12 @@ class PIDController(Node):
             self.left_prev_actual = self.left_speed
             self.right_prev_actual = self.right_speed
         else:
+            # Remember previous outputs for slew-rate limiting
+            prev_left = self.left_output
+            prev_right = self.right_output
+
             # PID for left wheel
-            self.left_output, self.left_prev_actual, self.left_integral = (
+            new_left, self.left_prev_actual, self.left_integral = (
                 self.compute_pid(
                     self.target_left_speed,
                     self.left_speed,
@@ -213,7 +227,7 @@ class PIDController(Node):
             )
 
             # PID for right wheel
-            self.right_output, self.right_prev_actual, self.right_integral = (
+            new_right, self.right_prev_actual, self.right_integral = (
                 self.compute_pid(
                     self.target_right_speed,
                     self.right_speed,
@@ -221,6 +235,11 @@ class PIDController(Node):
                     self.right_integral
                 )
             )
+
+            # Slew-rate limit so the PWM ramps instead of snapping 0<->full,
+            # which removes the surge/coast "move-stop-move" behaviour.
+            self.left_output = self._slew_limit(prev_left, new_left)
+            self.right_output = self._slew_limit(prev_right, new_right)
 
         # Publish PWM to motor driver
         pwm_msg = Float32MultiArray()

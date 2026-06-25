@@ -7,7 +7,7 @@ Starts the core hardware nodes for the Raspberry Pi direct-control pipeline:
   - pid: closed-loop PID speed controller
   - motor_driver: L298N motor driver via GPIO
   - odometry: computes robot pose from encoder ticks
-  - static TF: base_link -> laser_link (from URDF values)
+  - static TF: base_link -> laser (from URDF values)
 """
 
 from launch import LaunchDescription
@@ -16,7 +16,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
-    # --- Static TF: base_link -> laser_link (values from URDF) ---
+    # --- Static TF: base_link -> laser (values from URDF) ---
     # URDF laser_joint: xyz="-0.0050526 -0.0023221 0.1208" rpy="0 0 3.14"
     base_to_laser_tf = Node(
         package="tf2_ros",

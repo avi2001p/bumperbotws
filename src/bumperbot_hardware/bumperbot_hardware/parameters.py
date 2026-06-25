@@ -103,6 +103,13 @@ MIN_PWM_DEADZONE = 40.0         # Minimum PWM (out of 255) to overcome motor sta
 # zeroes its targets so the robot stops (prevents runaway if the commander
 # node dies or is Ctrl+C'd).
 CMD_VEL_TIMEOUT = 0.5           # seconds
+# Wheel-speed feedback smoothing (exponential moving average). The Hall
+# encoder speed is noisy/quantized; filtering it stops the PID over-reacting
+# and surging. 0 = no filter (use raw), 1 = instant; lower = smoother.
+SPEED_FILTER_ALPHA = 0.4
+# Output slew-rate limit (max PWM change per control cycle). Prevents the
+# command jumping 0 -> full -> 0, which causes the "move-stop-move" surging.
+OUTPUT_SLEW_LIMIT = 40.0
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
