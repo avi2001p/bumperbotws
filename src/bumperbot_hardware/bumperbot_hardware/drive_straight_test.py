@@ -32,8 +32,11 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     MAX_LINEAR_SPEED,
     KP_HEADING,
+    KI_HEADING,
     K_CROSSTRACK,
     MAX_HEADING_CORRECTION,
+    HEADING_INTEGRAL_LIMIT,
+    HEADING_DEADBAND,
 )
 
 
@@ -139,11 +142,24 @@ class DriveStraightTest(Node):
         dy = self.y - self.start_y
 
         heading_error = normalize_angle(self.theta - self.start_theta)
+        # Deadband: ignore sub-degree noise so we don't micro-steer on jitter.
+        if abs(heading_error) < HEADING_DEADBAND:
+            heading_error = 0.0
+
+        # Integral term (PI): a P-only hold leaves a small STEADY drift because it
+        # needs a residual error to push against the constant bias. The integral
+        # accumulates that residual and nulls it, so the robot returns to its
+        # exact starting heading instead of settling slightly off.
+        self.heading_integral += heading_error * self.dt
+        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                    min(HEADING_INTEGRAL_LIMIT, self.heading_integral))
+
         # signed sideways offset from the line (+ = robot is LEFT of the line)
         cross_track = (-dx * math.sin(self.start_theta)
                        + dy * math.cos(self.start_theta))
 
         correction = -(self.heading_gain * heading_error
+                       + KI_HEADING * self.heading_integral
                        + K_CROSSTRACK * cross_track)
         return max(-MAX_HEADING_CORRECTION,
                    min(MAX_HEADING_CORRECTION, correction))

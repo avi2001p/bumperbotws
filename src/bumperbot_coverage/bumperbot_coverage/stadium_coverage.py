@@ -49,8 +49,11 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     WATER_CLEANING_TOPIC,
     KP_HEADING,
+    KI_HEADING,
     K_CROSSTRACK,
     MAX_HEADING_CORRECTION,
+    HEADING_INTEGRAL_LIMIT,
+    HEADING_DEADBAND,
 )
 
 
@@ -410,11 +413,23 @@ class StadiumCoverageNode(Node):
         dy = self.y - self.segment_start_y
 
         heading_error = self.normalize_angle(self.theta - self.segment_start_theta)
+        # Deadband: ignore sub-degree noise so we don't micro-steer on jitter.
+        if abs(heading_error) < HEADING_DEADBAND:
+            heading_error = 0.0
+
+        # Integral term (PI): nulls the small steady drift a P-only hold leaves,
+        # so each straight segment returns to its exact heading. heading_integral
+        # is reset to 0 at the start of every segment (see mark_segment_start).
+        self.heading_integral += heading_error * 0.05   # control loop dt = 0.05 s
+        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                    min(HEADING_INTEGRAL_LIMIT, self.heading_integral))
+
         # signed sideways offset from the line (+ = robot is LEFT of the line)
         cross_track = (-dx * math.sin(self.segment_start_theta)
                        + dy * math.cos(self.segment_start_theta))
 
         correction = -(KP_HEADING * heading_error
+                       + KI_HEADING * self.heading_integral
                        + K_CROSSTRACK * cross_track)
         return max(-MAX_HEADING_CORRECTION,
                    min(MAX_HEADING_CORRECTION, correction))
