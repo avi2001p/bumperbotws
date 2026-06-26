@@ -62,20 +62,20 @@ MOTOR_AXLE_FROM_FRONT = 0.07   # 7cm from the front
 # ==========================================================
 ENCODER_PPR = 11              # Pulses per motor shaft revolution
 GEAR_RATIO = 20.5             # Calibrated gear ratio
-TICKS_PER_REV = 431           # Calibrated: hand-roll gave 448, then a powered 2 m
-                              # drive measured 2.08 m on the floor, so scaled by
-                              # 2.0/2.08 = 0.962 to make DRIVEN distance exact.
-# Per-wheel tick calibration. Two 2 m rolls showed the LEFT encoder counts ~4%
-# more ticks per metre than the RIGHT (L/R ratio = 1.040 then 1.045 — consistent
-# across different push distances, so it's a REAL asymmetry, not push error).
-# ODOMETRY uses these per-wheel values so straight driving reads as straight
-# (kills the ~20° false heading drift a single value caused over 2 m). Both were
-# scaled by the SAME 0.962 as TICKS_PER_REV (driven-distance fix), which keeps
-# the L/R RATIO — and therefore the heading calibration — unchanged.
-# The PID still uses the single TICKS_PER_REV above (symmetric → does NOT disturb
-# the heading-held straight line).
-LEFT_TICKS_PER_REV = 440
-RIGHT_TICKS_PER_REV = 423
+TICKS_PER_REV = 448           # >>> The value at the confirmed "95% PERFECT" straight
+                              # line — DO NOT CHANGE. A powered 2 m drive measured
+                              # 2.08 m (~4% long), but we KEEP 448 because it gives
+                              # the best straight-line feel. The 4% distance error is
+                              # fixed later by lidar localization, which does NOT
+                              # touch how the robot drives.
+# Per-wheel tick calibration — the EXACT values at the "95% perfect" run.
+# Two 2 m rolls showed the LEFT encoder counts ~4% more ticks per metre than the
+# RIGHT (L/R ratio 1.040/1.045 — a real asymmetry). ODOMETRY uses these so
+# straight driving reads as straight (kills the ~20° false heading drift a single
+# value caused over 2 m). >>> DO NOT rescale these — it changes the heading
+# sensitivity the heading-hold is tuned to and brings back the little dance.
+LEFT_TICKS_PER_REV = 457
+RIGHT_TICKS_PER_REV = 440
 # ----------------------------------------------------------
 # ENCODER DIRECTION SIGNS
 # ----------------------------------------------------------
