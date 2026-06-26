@@ -158,15 +158,19 @@ K_SYNC = 0.0
 # ----------------------------------------------------------
 # HEADING-HOLD CONTROLLER (straight-line correction)
 # ----------------------------------------------------------
-# PI heading controller. KP reacts to the current heading error; KI accumulates
-# it to cancel a CONSTANT bias (e.g. one wheel slightly weaker from weight
-# imbalance) that a P-only controller would leave as a permanent slight turn.
-# DISABLED (0.0): the heading-hold steers off wheel-odometry heading, which is
-# biased and DRIFTS over distance — after ~50 cm the accumulated bias makes it
-# steer the robot left even when it's physically straight. With the caster fixed
-# and wheels balanced, no odometry steering is better than wrong steering.
-# Re-enable only with a real heading sensor (IMU gyro).
-KP_HEADING = 0.0
+# P heading controller — the ACTUAL straight-line fix.
+# It steers angular.z = -KP_HEADING * heading_error to actively hold the robot on
+# its starting heading, correcting ANY drift (motor imbalance, battery weight on
+# one side, wheel slip) AUTOMATICALLY — which is exactly what per-wheel SPEED
+# balance (trims/integral/added weight) cannot do. That's why the robot turned
+# LEFT with the battery and RIGHT without it: speed balance can't hold heading,
+# this can.
+# It was DISABLED before only because wheel-odometry heading was biased (~20°/2 m
+# false drift). The per-wheel tick calibration (LEFT/RIGHT_TICKS_PER_REV) fixed
+# that — straight now reads ~0° — so the heading-hold can finally trust odometry.
+#   wiggles / oscillates  -> lower KP_HEADING (1.0, 0.8)
+#   corrects too slowly    -> raise KP_HEADING (2.0, 2.5)
+KP_HEADING = 1.5
 # Cross-track gain: steers back onto the line using odometry X/Y offset.
 # DISABLED (0.0) on purpose: odometry heading/position on this robot is too
 # noisy/biased (mismatched cheap encoders) for cross-track — correcting hard off
