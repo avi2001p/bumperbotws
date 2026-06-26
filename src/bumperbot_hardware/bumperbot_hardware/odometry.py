@@ -55,9 +55,12 @@ class Odometry(Node):
         self.prev_left_ticks  = self.left_ticks
         self.prev_right_ticks = self.right_ticks
 
-        # Convert ticks to wheel travel distance
-        left_distance  = (delta_left_ticks  / TICKS_PER_REV) * WHEEL_CIRCUMFERENCE
-        right_distance = (delta_right_ticks / TICKS_PER_REV) * WHEEL_CIRCUMFERENCE
+        # Convert ticks to wheel travel distance. Each wheel uses its OWN
+        # calibrated ticks/rev because the left encoder counts ~4% more ticks
+        # per metre than the right — using a single value would make straight
+        # driving look like a ~20°/2 m right turn (false heading drift).
+        left_distance  = (delta_left_ticks  / LEFT_TICKS_PER_REV)  * WHEEL_CIRCUMFERENCE
+        right_distance = (delta_right_ticks / RIGHT_TICKS_PER_REV) * WHEEL_CIRCUMFERENCE
 
         # Robot movement
         distance    = (left_distance + right_distance) / 2.0

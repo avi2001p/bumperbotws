@@ -62,7 +62,17 @@ MOTOR_AXLE_FROM_FRONT = 0.07   # 7cm from the front
 # ==========================================================
 ENCODER_PPR = 11              # Pulses per motor shaft revolution
 GEAR_RATIO = 20.5             # Calibrated gear ratio
-TICKS_PER_REV = 451           # Calibrated ticks per revolution (measured on physical robot)
+TICKS_PER_REV = 448           # Calibrated: 2 m roll = L4479/R4306 ticks over 9.794 revs (avg 448)
+# Per-wheel tick calibration. Two 2 m rolls showed the LEFT encoder counts ~4%
+# more ticks per metre than the RIGHT (L/R ratio = 1.040 then 1.045 — consistent
+# across different push distances, so it's a REAL asymmetry, not push error).
+# ODOMETRY uses these per-wheel values so straight driving reads as straight
+# (kills the ~20° false heading drift a single value caused over 2 m). The PID
+# still uses the single TICKS_PER_REV above (symmetric → does NOT disturb the
+# mechanically-balanced straight line). Switch the PID to per-wheel later only
+# if needed.
+LEFT_TICKS_PER_REV = 457
+RIGHT_TICKS_PER_REV = 440
 # ----------------------------------------------------------
 # ENCODER DIRECTION SIGNS
 # ----------------------------------------------------------
