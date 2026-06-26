@@ -106,12 +106,13 @@ KD = 0.0
 #   KFF ≈ PID_OUTPUT_MAX / (max ticks/sec at MAX_LINEAR_SPEED)
 #       = 255 / ((0.30 / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV) ≈ 0.38
 KFF = 0.38
-# Per-wheel feed-forward TRIM — optional fine balance for unequal motors.
-# Left at 1.0 / 1.0 (NO trim) so the integral does the balancing, same as the
-# original "straight for 50 cm" run. Only touch these if, after tuning the
-# integral, a small steady curve remains:
-#   curves RIGHT (left too fast) -> lower LEFT_FF_TRIM slightly (e.g. 0.97)
-#   curves LEFT  (right too fast) -> lower RIGHT_FF_TRIM slightly
+# Per-wheel feed-forward TRIM — kept at 1.0 / 1.0 (NO software trim) ON PURPOSE.
+# The straight-line balance is done MECHANICALLY: the 18650 battery pack is
+# mounted on the LEFT side (the spot the phone was tested in), which loads the
+# left wheel and cancels its over-drive. Do NOT add a software trim on top of
+# that physical weight or the two corrections stack and the robot curves RIGHT.
+# >>> After the 12V fan + battery pack are installed the weight changes, so we
+#     RE-TUNE then (likely just INTEGRAL_WINDUP_LIMIT, maybe a small trim here).
 LEFT_FF_TRIM = 1.0
 RIGHT_FF_TRIM = 1.0
 PID_OUTPUT_MIN = -255.0
