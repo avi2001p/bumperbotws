@@ -150,6 +150,10 @@ class StadiumCoverageNode(Node):
         self.segment_start_y = 0.0
         self.segment_start_theta = 0.0
         self.heading_integral = 0.0
+        # Accumulated turn for the current arc (summed step-by-step so it never
+        # wraps at +/-pi and stalls the turn). Reset at each segment start.
+        self.arc_accum = 0.0
+        self.arc_prev_theta = 0.0
 
         # --- Publishers / Subscribers ---
         self.cmd_vel_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
@@ -431,6 +435,9 @@ class StadiumCoverageNode(Node):
         self.segment_start_theta = self.theta
         # Reset heading integral so each straight starts clean
         self.heading_integral = 0.0
+        # Reset the arc turn accumulator for the new segment
+        self.arc_accum = 0.0
+        self.arc_prev_theta = self.theta
 
     def execute_straight(self, params):
         """
@@ -493,10 +500,15 @@ class StadiumCoverageNode(Node):
         target_angle = params["angle"]
         arc_radius = params["radius"]
 
-        # Heading change since segment start
-        d_theta = abs(self.normalize_angle(self.theta - self.segment_start_theta))
+        # Accumulate the turned angle incrementally. Each step is a small,
+        # normalized delta summed up — so the total never suffers the +/-pi
+        # wrap that made abs(normalize(theta - start)) stall at 180 and turn
+        # forever. The U-turn rotates one way, so the running sum grows cleanly.
+        step = self.normalize_angle(self.theta - self.arc_prev_theta)
+        self.arc_accum += step
+        self.arc_prev_theta = self.theta
 
-        if d_theta >= target_angle * self.arc_fraction:
+        if abs(self.arc_accum) >= target_angle * self.arc_fraction:
             self.stop_robot()
             return True
 
