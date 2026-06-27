@@ -88,10 +88,11 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("ground_straight_length", GROUND_STRAIGHT_LENGTH)
         self.declare_parameter("robot_coverage_width", ROBOT_WIDTH)
         self.declare_parameter("overlap", COVERAGE_OVERLAP)
-        # Extra gap (m) between the robot's SIDE and the boundary wall, on top of
-        # the half-robot-width. Keeps the robot (and its wide outer swing on the
-        # turns) safely off the walls. ~0.09 m -> robot centre ~0.20 m from wall.
-        self.declare_parameter("wall_clearance", 0.09)
+        # Gap (m) between the robot's SIDE and the boundary wall — applies on the
+        # straights AND the outer swing of the turns. 0.05 = 5 cm each side (keeps
+        # coverage tight in the limited 1.2 m arena). NOTE: the arc runs ~10% wide,
+        # so if the robot scrapes a wall on a U-turn, bump this one number to 0.07.
+        self.declare_parameter("wall_clearance", 0.05)
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
         self.declare_parameter("use_lidar_safety", True)
