@@ -96,6 +96,11 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("wall_clearance", 0.05)
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
+        # Fraction of the 180 arc to complete before ending the turn. 0.95 stops
+        # ~9 short (which mis-aligns the next straight); 1.0 completes the full
+        # half-circle. This is COVERAGE geometry, NOT the PID. Dial down if the
+        # robot over-turns, up if turns finish short.
+        self.declare_parameter("arc_complete_fraction", 1.0)
         # Where the planner reads the robot pose from:
         #   "odom" -> raw wheel odometry (drifts at the turns)
         #   "map"  -> the LOCALIZED pose (map->base_link TF from slam_toolbox
@@ -116,6 +121,7 @@ class StadiumCoverageNode(Node):
         self.overlap = self.get_parameter("overlap").value
         self.wall_clearance = self.get_parameter("wall_clearance").value
         self.linear_speed = self.get_parameter("linear_speed").value
+        self.arc_fraction = self.get_parameter("arc_complete_fraction").value
         auto_start = self.get_parameter("auto_start").value
         self.pose_source = self.get_parameter("pose_source").value
         self.use_lidar = self.get_parameter("use_lidar_safety").value
@@ -490,7 +496,7 @@ class StadiumCoverageNode(Node):
         # Heading change since segment start
         d_theta = abs(self.normalize_angle(self.theta - self.segment_start_theta))
 
-        if d_theta >= target_angle * 0.95:  # 95% threshold to handle overshoot
+        if d_theta >= target_angle * self.arc_fraction:
             self.stop_robot()
             return True
 
