@@ -136,6 +136,10 @@ class StadiumCoverageNode(Node):
         self.state = IDLE
         self.water_cleaning_active = False
         self.obstacle_detected = False
+        # Brief stop between segments so the turning momentum dies before the
+        # next segment starts (otherwise leftover spin curves the next straight).
+        self.settle_start = None
+        self.settle_seconds = 0.6
 
         # --- Path plan ---
         self.path_segments = []      # list of (type, param_dict)
@@ -367,6 +371,17 @@ class StadiumCoverageNode(Node):
                 self.get_logger().info("Obstacle cleared. Resuming coverage.")
             return
 
+        # --- State: TRANSITIONING (brief settle between segments) ---
+        if self.state == TRANSITIONING:
+            self.stop_robot()
+            elapsed = (self.get_clock().now() - self.settle_start).nanoseconds / 1e9
+            if elapsed >= self.settle_seconds:
+                # Robot has stopped spinning — capture the clean settled heading
+                # and start the next segment, which now drives straight.
+                self.mark_segment_start()
+                self.state = COVERING
+            return
+
         # --- State: COMPLETE ---
         if self.state == COMPLETE:
             self.stop_robot()
@@ -412,7 +427,11 @@ class StadiumCoverageNode(Node):
                 )
                 self.current_segment_idx += 1
                 if self.current_segment_idx < len(self.path_segments):
-                    self.mark_segment_start()
+                    # Brief stop first so turning momentum dies; mark_segment_start
+                    # then runs from a settled heading (see TRANSITIONING state).
+                    self.state = TRANSITIONING
+                    self.settle_start = self.get_clock().now()
+                    self.stop_robot()
 
     # ===================================================================
     #  SEGMENT EXECUTION
