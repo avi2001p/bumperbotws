@@ -37,6 +37,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+from tf2_ros import Buffer, TransformListener
 
 from bumperbot_hardware.parameters import (
     GROUND_WIDTH,
@@ -95,6 +96,12 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("wall_clearance", 0.05)
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
+        # Where the planner reads the robot pose from:
+        #   "odom" -> raw wheel odometry (drifts at the turns)
+        #   "map"  -> the LOCALIZED pose (map->base_link TF from slam_toolbox
+        #             localization), which corrects that drift. Needs
+        #             localization.launch.py running with the saved 'arena' map.
+        self.declare_parameter("pose_source", "odom")
         self.declare_parameter("use_lidar_safety", True)
         # Emergency-stop distance for a HEAD-ON obstacle. Kept small so the
         # arena's side walls (~0.6 m away) don't trip a permanent pause.
@@ -110,6 +117,7 @@ class StadiumCoverageNode(Node):
         self.wall_clearance = self.get_parameter("wall_clearance").value
         self.linear_speed = self.get_parameter("linear_speed").value
         auto_start = self.get_parameter("auto_start").value
+        self.pose_source = self.get_parameter("pose_source").value
         self.use_lidar = self.get_parameter("use_lidar_safety").value
         self.safety_distance = self.get_parameter("safety_distance").value
         self.safety_cone = math.radians(
@@ -151,6 +159,11 @@ class StadiumCoverageNode(Node):
         self.scan_sub = self.create_subscription(
             LaserScan, "scan", self.scan_callback, 10
         )
+
+        # --- TF listener: used when pose_source == "map" to read the LOCALIZED
+        #     pose (map -> base_link) published by slam_toolbox localization. ---
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
         # --- Control loop at 20 Hz ---
         self.timer = self.create_timer(0.05, self.control_loop)
@@ -246,7 +259,9 @@ class StadiumCoverageNode(Node):
     # ===================================================================
 
     def odom_callback(self, msg):
-        """Update robot pose from odometry."""
+        """Update robot pose from wheel odometry (only when pose_source='odom')."""
+        if self.pose_source != "odom":
+            return
         self.x = msg.pose.pose.position.x
         self.y = msg.pose.pose.position.y
         q = [
@@ -260,6 +275,24 @@ class StadiumCoverageNode(Node):
         if not self.odom_received:
             self.odom_received = True
             self.get_logger().info("Odometry received. Ready to start coverage.")
+
+    def update_pose_from_tf(self):
+        """Read the LOCALIZED pose (map -> base_link) when pose_source='map'.
+        slam_toolbox localization publishes the map->odom correction, so this
+        transform is the robot's drift-corrected pose in the map frame."""
+        try:
+            t = self.tf_buffer.lookup_transform(
+                "map", "base_link", rclpy.time.Time()
+            )
+        except Exception:
+            return  # localization/TF not ready yet — keep waiting
+        self.x = t.transform.translation.x
+        self.y = t.transform.translation.y
+        q = t.transform.rotation
+        self.theta = yaw_from_quaternion([q.x, q.y, q.z, q.w])
+        if not self.odom_received:
+            self.odom_received = True
+            self.get_logger().info("Localized (map) pose received. Ready to start coverage.")
 
     def water_callback(self, msg):
         """Receive water cleaning pause/resume signal."""
@@ -301,7 +334,11 @@ class StadiumCoverageNode(Node):
     def control_loop(self):
         """Main control loop — runs at 20 Hz."""
 
-        # --- Wait for odometry ---
+        # When localizing against the map, refresh the corrected pose each cycle.
+        if self.pose_source == "map":
+            self.update_pose_from_tf()
+
+        # --- Wait for a pose (odometry or localization) ---
         if not self.odom_received:
             return
 
