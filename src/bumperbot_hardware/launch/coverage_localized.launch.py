@@ -46,10 +46,6 @@ def generate_launch_description():
     linear_speed_arg = DeclareLaunchArgument("linear_speed", default_value="0.15")
     auto_start_arg = DeclareLaunchArgument("auto_start", default_value="true")
     use_lidar_safety_arg = DeclareLaunchArgument("use_lidar_safety", default_value="false")
-    # Gap (m) between the robot's OUTER edge and the wall, on straights + turns.
-    # Each 0.01 less = +0.02 m (2 cm) semicircle diameter. 0.025 = +5 cm vs the
-    # original 0.05. Bump up if it scrapes the wall.
-    wall_clearance_arg = DeclareLaunchArgument("wall_clearance", default_value="0.025")
 
     pose_source = LaunchConfiguration("pose_source")
 
@@ -91,7 +87,6 @@ def generate_launch_description():
             "use_lidar_safety": LaunchConfiguration("use_lidar_safety"),
             "linear_speed": LaunchConfiguration("linear_speed"),
             "auto_start": LaunchConfiguration("auto_start"),
-            "wall_clearance": LaunchConfiguration("wall_clearance"),
         }],
     )
 
@@ -100,7 +95,6 @@ def generate_launch_description():
         linear_speed_arg,
         auto_start_arg,
         use_lidar_safety_arg,
-        wall_clearance_arg,
         hardware,
         lidar,
         localization,
