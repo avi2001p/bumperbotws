@@ -47,12 +47,9 @@ def generate_launch_description():
     auto_start_arg = DeclareLaunchArgument("auto_start", default_value="true")
     use_lidar_safety_arg = DeclareLaunchArgument("use_lidar_safety", default_value="false")
     # Gap (m) between the robot's OUTER edge and the wall, on straights + turns.
-    # Each 0.01 less = +0.02 m (2 cm) semicircle diameter. 0.02 = +6 cm vs the
-    # original 0.05, leaving ~3 cm from the wall. Bump up if it scrapes.
-    wall_clearance_arg = DeclareLaunchArgument("wall_clearance", default_value="0.02")
-    # How far each turn completes: 1.0 = full 180 (keeps the return straight
-    # aligned). Lower it if the robot over-turns. COVERAGE geometry, NOT PID.
-    arc_fraction_arg = DeclareLaunchArgument("arc_fraction", default_value="1.0")
+    # Each 0.01 less = +0.02 m (2 cm) semicircle diameter. 0.025 = +5 cm vs the
+    # original 0.05. Bump up if it scrapes the wall.
+    wall_clearance_arg = DeclareLaunchArgument("wall_clearance", default_value="0.025")
 
     pose_source = LaunchConfiguration("pose_source")
 
@@ -95,7 +92,6 @@ def generate_launch_description():
             "linear_speed": LaunchConfiguration("linear_speed"),
             "auto_start": LaunchConfiguration("auto_start"),
             "wall_clearance": LaunchConfiguration("wall_clearance"),
-            "arc_complete_fraction": LaunchConfiguration("arc_fraction"),
         }],
     )
 
@@ -105,7 +101,6 @@ def generate_launch_description():
         auto_start_arg,
         use_lidar_safety_arg,
         wall_clearance_arg,
-        arc_fraction_arg,
         hardware,
         lidar,
         localization,

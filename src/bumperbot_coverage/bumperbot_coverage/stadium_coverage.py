@@ -96,11 +96,6 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("wall_clearance", 0.05)
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
-        # Fraction of the 180 arc to complete before ending the turn. 0.95 stops
-        # ~9 short (which mis-aligns the next straight); 1.0 completes the full
-        # half-circle. This is COVERAGE geometry, NOT the PID. Dial down if the
-        # robot over-turns, up if turns finish short.
-        self.declare_parameter("arc_complete_fraction", 1.0)
         # Where the planner reads the robot pose from:
         #   "odom" -> raw wheel odometry (drifts at the turns)
         #   "map"  -> the LOCALIZED pose (map->base_link TF from slam_toolbox
@@ -121,7 +116,6 @@ class StadiumCoverageNode(Node):
         self.overlap = self.get_parameter("overlap").value
         self.wall_clearance = self.get_parameter("wall_clearance").value
         self.linear_speed = self.get_parameter("linear_speed").value
-        self.arc_fraction = self.get_parameter("arc_complete_fraction").value
         auto_start = self.get_parameter("auto_start").value
         self.pose_source = self.get_parameter("pose_source").value
         self.use_lidar = self.get_parameter("use_lidar_safety").value
@@ -150,10 +144,6 @@ class StadiumCoverageNode(Node):
         self.segment_start_y = 0.0
         self.segment_start_theta = 0.0
         self.heading_integral = 0.0
-        # Accumulated turn for the current arc (summed step-by-step so it never
-        # wraps at +/-pi and stalls the turn). Reset at each segment start.
-        self.arc_accum = 0.0
-        self.arc_prev_theta = 0.0
 
         # --- Publishers / Subscribers ---
         self.cmd_vel_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
@@ -435,9 +425,6 @@ class StadiumCoverageNode(Node):
         self.segment_start_theta = self.theta
         # Reset heading integral so each straight starts clean
         self.heading_integral = 0.0
-        # Reset the arc turn accumulator for the new segment
-        self.arc_accum = 0.0
-        self.arc_prev_theta = self.theta
 
     def execute_straight(self, params):
         """
@@ -500,15 +487,10 @@ class StadiumCoverageNode(Node):
         target_angle = params["angle"]
         arc_radius = params["radius"]
 
-        # Accumulate the turned angle incrementally. Each step is a small,
-        # normalized delta summed up — so the total never suffers the +/-pi
-        # wrap that made abs(normalize(theta - start)) stall at 180 and turn
-        # forever. The U-turn rotates one way, so the running sum grows cleanly.
-        step = self.normalize_angle(self.theta - self.arc_prev_theta)
-        self.arc_accum += step
-        self.arc_prev_theta = self.theta
+        # Heading change since segment start
+        d_theta = abs(self.normalize_angle(self.theta - self.segment_start_theta))
 
-        if abs(self.arc_accum) >= target_angle * self.arc_fraction:
+        if d_theta >= target_angle * 0.95:  # 95% threshold to handle overshoot
             self.stop_robot()
             return True
 
