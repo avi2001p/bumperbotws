@@ -88,6 +88,10 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("ground_straight_length", GROUND_STRAIGHT_LENGTH)
         self.declare_parameter("robot_coverage_width", ROBOT_WIDTH)
         self.declare_parameter("overlap", COVERAGE_OVERLAP)
+        # Extra gap (m) between the robot's SIDE and the boundary wall, on top of
+        # the half-robot-width. Keeps the robot (and its wide outer swing on the
+        # turns) safely off the walls. ~0.09 m -> robot centre ~0.20 m from wall.
+        self.declare_parameter("wall_clearance", 0.09)
         self.declare_parameter("linear_speed", 0.08)
         self.declare_parameter("auto_start", True)
         self.declare_parameter("use_lidar_safety", True)
@@ -102,6 +106,7 @@ class StadiumCoverageNode(Node):
         self.ground_sl = self.get_parameter("ground_straight_length").value
         self.coverage_w = self.get_parameter("robot_coverage_width").value
         self.overlap = self.get_parameter("overlap").value
+        self.wall_clearance = self.get_parameter("wall_clearance").value
         self.linear_speed = self.get_parameter("linear_speed").value
         auto_start = self.get_parameter("auto_start").value
         self.use_lidar = self.get_parameter("use_lidar_safety").value
@@ -181,7 +186,9 @@ class StadiumCoverageNode(Node):
         """
         self.path_segments = []
         step = self.coverage_w - self.overlap
-        offset = self.coverage_w / 2.0   # start half-robot-width from boundary
+        # Start so the robot's SIDE clears the wall by wall_clearance (not just
+        # its centre at half-width), so it never scrapes on straights or turns.
+        offset = self.coverage_w / 2.0 + self.wall_clearance
 
         ring = 0
         while True:

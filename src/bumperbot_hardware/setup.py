@@ -31,6 +31,7 @@ setup(
             'odometry = bumperbot_hardware.odometry:main',
             'drive_straight_test = bumperbot_hardware.drive_straight_test:main',
             'spin_test = bumperbot_hardware.spin_test:main',
+            'arc_test = bumperbot_hardware.arc_test:main',
             'water_actuator = bumperbot_hardware.water_actuator:main',
             'calibrate_encoders = bumperbot_hardware.calibrate_encoders:main',
             'diagnose_slam = bumperbot_hardware.diagnose_slam:main',
