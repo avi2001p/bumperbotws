@@ -80,7 +80,9 @@ class WallFollowCoverageNode(Node):
 
         # --- Geometry / coverage params ---
         self.declare_parameter("follow_side", "right")     # "right" -> S=-1, "left" -> +1
-        self.declare_parameter("wall_clearance", 0.02)     # lane-0 side gap beyond half-width
+        # 0.04 => straight target_offset = half_width(0.11) + 0.04 = 0.15 m
+        # (robot EDGE ~4 cm from the wall, so the wheels clear on the straights)
+        self.declare_parameter("wall_clearance", 0.04)     # lane-0 side gap beyond half-width
         self.declare_parameter("overlap", COVERAGE_OVERLAP)
         self.declare_parameter("inner_margin", 0.04)       # stop margin from centre
         self.declare_parameter("max_laps", 8)              # hard backstop
@@ -102,9 +104,9 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("curve_margin", 0.25)       # how early to start rounding
         self.declare_parameter("r_min", 0.15)              # tightest feed-forward radius
         # Extra gap to hold ON the curved end only, so the swinging wheels clear
-        # the border (also makes the semicircle a bit smaller). Raise if it still
-        # clips, lower toward 0 to hug the curve closer.
-        self.declare_parameter("curve_extra_offset", 0.05)
+        # the border (also makes the semicircle a bit smaller). With straight
+        # offset now 0.15, 0.03 keeps the curve at ~0.18 m (where it already works).
+        self.declare_parameter("curve_extra_offset", 0.03)
 
         # --- Lidar cones (deg, half-angle) ---
         self.declare_parameter("side_cone_deg", 25.0)
