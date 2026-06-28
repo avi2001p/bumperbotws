@@ -55,6 +55,7 @@ from bumperbot_hardware.parameters import (
     MAX_HEADING_CORRECTION,
     HEADING_INTEGRAL_LIMIT,
     HEADING_DEADBAND,
+    ROBOT_LENGTH,
 )
 
 
@@ -124,6 +125,31 @@ class StadiumCoverageNode(Node):
             self.get_parameter("safety_cone_deg").value
         )
 
+        # --- LIDAR-triggered turn (turn AT the wall, not by odometry distance) ---
+        # Master switch: False -> exact original odom-distance behaviour.
+        self.declare_parameter("lidar_turn_enable", True)
+        # Narrow, NEAR-AXIS front cone (deg, half-angle). Kept small so the side
+        # walls (only ~0.16 m away on the outer ring) never enter the reading.
+        self.declare_parameter("front_cone_deg", 6.0)
+        self.declare_parameter("min_valid_range", 0.08)   # ignore chassis self-hits
+        self.declare_parameter("max_valid_range", 4.0)    # ignore out-of-arena noise
+        self.declare_parameter("min_cone_points", 3)      # min rays to trust a reading
+        # turn_distance = arc_radius + robot_half_diagonal + this margin
+        self.declare_parameter("turn_clearance_margin", 0.12)
+        self.declare_parameter("scan_timeout", 0.5)       # stale scan -> treat as no data
+        self.declare_parameter("min_straight_travel", 0.10)  # ignore trips in first 10cm
+
+        self.lidar_turn_enable = self.get_parameter("lidar_turn_enable").value
+        self.front_cone = math.radians(self.get_parameter("front_cone_deg").value)
+        self.min_valid_range = self.get_parameter("min_valid_range").value
+        self.max_valid_range = self.get_parameter("max_valid_range").value
+        self.min_cone_points = self.get_parameter("min_cone_points").value
+        self.turn_clearance_margin = self.get_parameter("turn_clearance_margin").value
+        self.scan_timeout = self.get_parameter("scan_timeout").value
+        self.min_straight_travel = self.get_parameter("min_straight_travel").value
+        # Worst-case body extent that swings toward the wall during a turn.
+        self.robot_half_diag = math.hypot(ROBOT_LENGTH / 2.0, ROBOT_WIDTH / 2.0)
+
         self.semicircle_r = self.ground_w / 2.0
 
         # --- Robot pose from odometry ---
@@ -131,6 +157,11 @@ class StadiumCoverageNode(Node):
         self.y = 0.0
         self.theta = 0.0
         self.odom_received = False
+
+        # --- Lidar wall-distance state (for turn triggering) ---
+        self.front_wall_dist = None
+        self.scan_stamp = self.get_clock().now()
+        self.seg_turn_distance = None
 
         # --- State machine ---
         self.state = IDLE
@@ -208,6 +239,14 @@ class StadiumCoverageNode(Node):
         while True:
             # Current ring dimensions
             arc_radius = self.semicircle_r - offset
+            # SAFETY CAP: the turn circle + robot body must fit inside the end
+            # cap, or the robot clips the curved wall mid-U-turn. Cap the radius
+            # so (radius + robot_half_diagonal + margin) <= semicircle radius.
+            max_safe_radius = (
+                self.semicircle_r - self.robot_half_diag - self.turn_clearance_margin
+            )
+            if arc_radius > max_safe_radius:
+                arc_radius = max_safe_radius
             straight_len = self.ground_sl  # straight section doesn't shrink with simple inward offset
 
             if arc_radius <= 0.05:   # too small to navigate
@@ -327,6 +366,47 @@ class StadiumCoverageNode(Node):
 
         self.obstacle_detected = obstacle_found
 
+        # --- Front wall distance for TURN TRIGGERING (does NOT affect e-stop) ---
+        # Conservative near-axis reading: errs short so the turn fires slightly
+        # early (away from the wall), never late.
+        self.front_wall_dist = self.cone_distance(msg, 0.0, self.front_cone)
+        self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
+
+    def cone_distance(self, msg, bearing, half_angle):
+        """Conservative distance (m) to the nearest wall in a robot-frame cone.
+        bearing 0 = straight ahead. The lidar is mounted yaw=pi, so robot-forward
+        is scan angle +/-pi; robot-frame bearing b = normalize(angle - pi).
+        Returns a LOW percentile (nearest structure, errs short) or None if there
+        are too few valid rays to trust."""
+        vals = []
+        angle_min = msg.angle_min
+        inc = msg.angle_increment
+        for idx, r in enumerate(msg.ranges):
+            if math.isinf(r) or math.isnan(r):
+                continue
+            if r < self.min_valid_range or r > self.max_valid_range:
+                continue
+            a = self.normalize_angle(angle_min + idx * inc)
+            b = self.normalize_angle(a - math.pi)
+            if abs(self.normalize_angle(b - bearing)) <= half_angle:
+                vals.append(r)
+        if len(vals) < self.min_cone_points:
+            return None
+        vals.sort()
+        # 20th percentile: robust to a few spurious short returns, but still
+        # conservative (nearer than the mean) so the turn fires slightly EARLY.
+        i = max(0, int(0.2 * len(vals)) - 1)
+        return vals[i]
+
+    def fresh_front_dist(self):
+        """Front wall distance if the scan is recent enough, else None."""
+        if self.front_wall_dist is None:
+            return None
+        age = (self.get_clock().now() - self.scan_stamp).nanoseconds * 1e-9
+        if age > self.scan_timeout:
+            return None
+        return self.front_wall_dist
+
     # ===================================================================
     #  CONTROL LOOP
     # ===================================================================
@@ -426,21 +506,68 @@ class StadiumCoverageNode(Node):
         # Reset heading integral so each straight starts clean
         self.heading_integral = 0.0
 
+        # Latch the turn-trigger distance for THIS segment: a STRAIGHT must end
+        # turn_distance BEFORE the wall so the following arc clears the end wall.
+        # turn_distance = (radius of the arc this straight feeds into)
+        #                 + robot half-diagonal + clearance margin.
+        if self.current_segment_idx < len(self.path_segments):
+            seg_type, _ = self.path_segments[self.current_segment_idx]
+        else:
+            seg_type = None
+        if seg_type == STRAIGHT:
+            r = None
+            for j in range(self.current_segment_idx, len(self.path_segments)):
+                t, p = self.path_segments[j]
+                if t == ARC:
+                    r = p["radius"]
+                    break
+            if r is None:
+                r = self.semicircle_r
+            self.seg_turn_distance = (
+                r + self.robot_half_diag + self.turn_clearance_margin
+            )
+        else:
+            self.seg_turn_distance = None
+
     def execute_straight(self, params):
         """
-        Drive straight for the specified distance.
-        Returns True when the segment is complete.
-        """
-        target_dist = params["distance"]
+        Drive straight until the LIDAR sees the end wall within turn_distance
+        (closed-loop), holding heading on odometry. Returns True when done.
 
-        # Distance traveled since segment start
+        Heading-hold (angular.z = heading_correction()) is unchanged; only the
+        SEGMENT-END condition is now lidar-based instead of odometry distance.
+        """
+        # Distance traveled since segment start (used only for the start blanking)
         dx = self.x - self.segment_start_x
         dy = self.y - self.segment_start_y
-        dist_traveled = math.sqrt(dx * dx + dy * dy)
+        dist_traveled = math.hypot(dx, dy)
 
-        if dist_traveled >= target_dist:
-            self.stop_robot()
-            return True
+        if self.lidar_turn_enable:
+            fwd = self.fresh_front_dist()       # meters, or None if missing/stale/sparse
+            td = self.seg_turn_distance         # per-segment turn distance
+
+            # PRIMARY: end the straight when the wall is within turn_distance.
+            if (fwd is not None and td is not None
+                    and fwd < td and dist_traveled >= self.min_straight_travel):
+                self.stop_robot()
+                return True
+
+            # FAIL-SAFE: the lidar is the ONLY turn trigger, so if we lose a
+            # usable front reading after leaving the start, HALT — never drive
+            # blind toward a wall we can't see.
+            if fwd is None and dist_traveled >= self.min_straight_travel:
+                self.stop_robot()
+                self.get_logger().warn(
+                    "Lidar front reading lost — halting (no blind driving). "
+                    "Check the lidar.",
+                    throttle_duration_sec=2.0,
+                )
+                return False
+        else:
+            # Lidar turn disabled -> original odometry-distance behaviour.
+            if dist_traveled >= params["distance"]:
+                self.stop_robot()
+                return True
 
         twist = Twist()
         twist.linear.x = self.linear_speed

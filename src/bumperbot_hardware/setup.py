@@ -30,6 +30,7 @@ setup(
             'pid = bumperbot_hardware.pid:main',
             'odometry = bumperbot_hardware.odometry:main',
             'drive_straight_test = bumperbot_hardware.drive_straight_test:main',
+            'wall_distance_monitor = bumperbot_hardware.wall_distance_monitor:main',
             'spin_test = bumperbot_hardware.spin_test:main',
             'arc_test = bumperbot_hardware.arc_test:main',
             'water_actuator = bumperbot_hardware.water_actuator:main',
