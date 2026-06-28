@@ -101,6 +101,10 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("curve_ff_enable", True)
         self.declare_parameter("curve_margin", 0.25)       # how early to start rounding
         self.declare_parameter("r_min", 0.15)              # tightest feed-forward radius
+        # Extra gap to hold ON the curved end only, so the swinging wheels clear
+        # the border (also makes the semicircle a bit smaller). Raise if it still
+        # clips, lower toward 0 to hug the curve closer.
+        self.declare_parameter("curve_extra_offset", 0.05)
 
         # --- Lidar cones (deg, half-angle) ---
         self.declare_parameter("side_cone_deg", 25.0)
@@ -144,6 +148,7 @@ class WallFollowCoverageNode(Node):
         self.curve_ff_enable = self.get_parameter("curve_ff_enable").value
         self.curve_margin = self.get_parameter("curve_margin").value
         self.r_min = self.get_parameter("r_min").value
+        self.curve_extra_offset = self.get_parameter("curve_extra_offset").value
 
         self.side_cone = math.radians(self.get_parameter("side_cone_deg").value)
         self.diag_cone = math.radians(self.get_parameter("diag_cone_deg").value)
@@ -382,8 +387,16 @@ class WallFollowCoverageNode(Node):
             )
             return
 
+        # Are we rounding an end cap? (front wall close)
+        front_anticipate = self.target_offset + ROBOT_LENGTH / 2.0 + self.curve_margin
+        on_curve = d_front < front_anticipate
+
+        # On the curve, follow at a LARGER gap so the swinging wheels clear the
+        # curved border (and the arc is a bit tighter / smaller diameter).
+        eff_offset = self.target_offset + (self.curve_extra_offset if on_curve else 0.0)
+
         # --- Steering: PD on side distance + parallel/damping term ---
-        e_dist = d_side - self.target_offset          # + => too far from wall
+        e_dist = d_side - eff_offset                  # + => too far from wall
         if d_fwd is not None and d_back is not None:
             # psi>0 => nose toed TOWARD the wall (verified against ray geometry)
             psi = math.atan2(d_back - d_fwd, d_fwd + d_back)
@@ -392,11 +405,9 @@ class WallFollowCoverageNode(Node):
         # Distance term steers AWAY when too close; psi term is subtracted to DAMP
         steer = self.S * (self.k_dist * e_dist - self.k_angle * psi)
 
-        # --- Curve feed-forward: round the end cap at radius (R_wall - offset) ---
-        front_anticipate = self.target_offset + ROBOT_LENGTH / 2.0 + self.curve_margin
-        on_curve = d_front < front_anticipate
+        # --- Curve feed-forward: round the end cap at radius (R_wall - eff_offset) ---
         if self.curve_ff_enable and on_curve:
-            path_radius = max(GROUND_SEMICIRCLE_RADIUS - self.target_offset, self.r_min)
+            path_radius = max(GROUND_SEMICIRCLE_RADIUS - eff_offset, self.r_min)
             kappa_ff = self.v_cmd / path_radius
             steer += -self.S * kappa_ff     # right wall (S=-1) -> +kappa = LEFT/CCW
         # End-cap rising-edge counter for lap detection
