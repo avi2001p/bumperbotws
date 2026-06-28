@@ -80,22 +80,24 @@ class WallFollowCoverageNode(Node):
 
         # --- Geometry / coverage params ---
         self.declare_parameter("follow_side", "right")     # "right" -> S=-1, "left" -> +1
-        self.declare_parameter("wall_clearance", 0.05)     # lane-0 side gap beyond half-width
+        self.declare_parameter("wall_clearance", 0.02)     # lane-0 side gap beyond half-width
         self.declare_parameter("overlap", COVERAGE_OVERLAP)
         self.declare_parameter("inner_margin", 0.04)       # stop margin from centre
         self.declare_parameter("max_laps", 8)              # hard backstop
 
         # --- Speed ---
-        self.declare_parameter("linear_speed_max", 0.10)
-        self.declare_parameter("linear_speed_min", 0.05)
-        self.declare_parameter("turn_slow_k", 0.5)
+        self.declare_parameter("linear_speed_max", 0.15)   # faster cruise
+        self.declare_parameter("linear_speed_min", 0.08)   # keep moving on curves
+        self.declare_parameter("turn_slow_k", 0.3)         # shed less speed on turns
         self.declare_parameter("curve_slow_near", 0.25)
         self.declare_parameter("curve_slow_far", 0.50)
-        self.declare_parameter("curve_min_frac", 0.5)
+        self.declare_parameter("curve_min_frac", 0.7)      # don't crawl through the cap
 
         # --- Steering gains (PD on side distance) ---
-        self.declare_parameter("k_dist", 5.0)              # rad/s per m of lateral error
-        self.declare_parameter("k_angle", 1.5)             # parallel/damping term
+        # Higher K_DIST pulls back to the setpoint FAST so the straight after a
+        # semicircle holds the border instead of drifting ~15 cm inward.
+        self.declare_parameter("k_dist", 7.0)              # rad/s per m of lateral error
+        self.declare_parameter("k_angle", 2.0)             # parallel/damping term
         self.declare_parameter("curve_ff_enable", True)
         self.declare_parameter("curve_margin", 0.25)       # how early to start rounding
         self.declare_parameter("r_min", 0.15)              # tightest feed-forward radius
@@ -113,9 +115,10 @@ class WallFollowCoverageNode(Node):
 
         # --- Safety ---
         self.declare_parameter("use_lidar_safety", True)
-        self.declare_parameter("safety_distance", 0.10)    # close+narrow head-on e-stop
+        self.declare_parameter("safety_distance", 0.07)    # very close head-on only —
+        #   so the CURVED end wall does not trip the e-stop and stall the robot
         self.declare_parameter("safety_cone_deg", 8.0)
-        self.declare_parameter("obstacle_resume_sec", 3.0)  # auto-resume (static arena)
+        self.declare_parameter("obstacle_resume_sec", 1.5)  # recover fast if it does pause
         self.declare_parameter("lap_timeout_sec", 90.0)     # per-lap watchdog
 
         self.declare_parameter("auto_start", True)
@@ -167,6 +170,16 @@ class WallFollowCoverageNode(Node):
         # Allow target_offset override (after computing the default)
         self.declare_parameter("target_offset", self.target_offset)
         self.target_offset = self.get_parameter("target_offset").value
+
+        # Floor: the lidar is at the robot CENTRE, so center-to-wall must stay
+        # above the body half-width or the robot scrapes the wall.
+        offset_floor = ROBOT_WIDTH / 2.0 + 0.02   # ~0.13 m (2 cm body clearance)
+        if self.target_offset < offset_floor:
+            self.get_logger().warn(
+                f"target_offset {self.target_offset:.2f} m below safe floor "
+                f"{offset_floor:.2f} m (robot is {ROBOT_WIDTH:.2f} m wide) — clamping."
+            )
+            self.target_offset = offset_floor
 
         # --- Pose ---
         self.x = 0.0
