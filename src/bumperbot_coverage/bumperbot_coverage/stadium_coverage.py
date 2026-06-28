@@ -138,6 +138,17 @@ class StadiumCoverageNode(Node):
         self.declare_parameter("turn_clearance_margin", 0.12)
         self.declare_parameter("scan_timeout", 0.5)       # stale scan -> treat as no data
         self.declare_parameter("min_straight_travel", 0.10)  # ignore trips in first 10cm
+        # Extra straight distance to drive BEFORE turning (m). Lets you push the
+        # U-turn closer to the end wall WITHOUT changing the turn radius. A safety
+        # floor keeps the arc clear of the wall no matter how high this is set.
+        self.declare_parameter("turn_trigger_extra", 0.0)
+        # GENTLE lidar side-wall hold during the straight: steer to keep the
+        # distance to the near side wall (border) constant, so the robot doesn't
+        # creep inward/outward after a turn. Correctly signed so it can only
+        # steer AWAY from a wall it gets too close to, never into it.
+        self.declare_parameter("wall_follow_enable", True)
+        self.declare_parameter("wall_follow_kp", 1.0)   # rad/s per metre of error
+        self.declare_parameter("side_cone_deg", 20.0)   # half-angle of side cone
 
         self.lidar_turn_enable = self.get_parameter("lidar_turn_enable").value
         self.front_cone = math.radians(self.get_parameter("front_cone_deg").value)
@@ -147,6 +158,10 @@ class StadiumCoverageNode(Node):
         self.turn_clearance_margin = self.get_parameter("turn_clearance_margin").value
         self.scan_timeout = self.get_parameter("scan_timeout").value
         self.min_straight_travel = self.get_parameter("min_straight_travel").value
+        self.turn_trigger_extra = self.get_parameter("turn_trigger_extra").value
+        self.wall_follow_enable = self.get_parameter("wall_follow_enable").value
+        self.wall_follow_kp = self.get_parameter("wall_follow_kp").value
+        self.side_cone = math.radians(self.get_parameter("side_cone_deg").value)
         # Worst-case body extent that swings toward the wall during a turn.
         self.robot_half_diag = math.hypot(ROBOT_LENGTH / 2.0, ROBOT_WIDTH / 2.0)
 
@@ -158,10 +173,14 @@ class StadiumCoverageNode(Node):
         self.theta = 0.0
         self.odom_received = False
 
-        # --- Lidar wall-distance state (for turn triggering) ---
+        # --- Lidar wall-distance state (for turn triggering + border hold) ---
         self.front_wall_dist = None
+        self.left_wall_dist = None
+        self.right_wall_dist = None
         self.scan_stamp = self.get_clock().now()
         self.seg_turn_distance = None
+        self.wall_side = 0           # +1 = follow LEFT wall, -1 = RIGHT, 0 = none
+        self.wall_target = None      # latched side-wall distance to hold (m)
 
         # --- State machine ---
         self.state = IDLE
@@ -373,6 +392,9 @@ class StadiumCoverageNode(Node):
         # Conservative near-axis reading: errs short so the turn fires slightly
         # early (away from the wall), never late.
         self.front_wall_dist = self.cone_distance(msg, 0.0, self.front_cone)
+        # Side walls for the border-hold (bearing +pi/2 = LEFT, -pi/2 = RIGHT)
+        self.left_wall_dist = self.cone_distance(msg, math.pi / 2.0, self.side_cone)
+        self.right_wall_dist = self.cone_distance(msg, -math.pi / 2.0, self.side_cone)
         self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
 
     def cone_distance(self, msg, bearing, half_angle):
@@ -511,6 +533,10 @@ class StadiumCoverageNode(Node):
         # Reset the arc turned-angle accumulator for the next segment
         self.arc_accumulated = 0.0
         self.arc_prev_theta = self.theta
+        # Reset the side-wall border hold; it re-latches once into the straight
+        # (past the curved end region).
+        self.wall_side = 0
+        self.wall_target = None
 
         # Latch the turn-trigger distance for THIS segment: a STRAIGHT must end
         # turn_distance BEFORE the wall so the following arc clears the end wall.
@@ -531,7 +557,11 @@ class StadiumCoverageNode(Node):
                 r = self.semicircle_r
             self.seg_turn_distance = (
                 r + self.robot_half_diag + self.turn_clearance_margin
+                - self.turn_trigger_extra
             )
+            # Safety floor: never turn so late that the arc has no room to clear
+            # the wall, no matter how large turn_trigger_extra is set.
+            self.seg_turn_distance = max(self.seg_turn_distance, r + 0.08)
         else:
             self.seg_turn_distance = None
 
@@ -575,9 +605,32 @@ class StadiumCoverageNode(Node):
                 self.stop_robot()
                 return True
 
+        # Steering = heading-hold + GENTLE lidar side-wall (border) hold.
+        # The border hold latches the near side-wall distance once we're past the
+        # curved end region, then nulls any small inward/outward creep so the
+        # straight stays parallel at a fixed distance from the border.
+        steer = self.heading_correction()
+        if self.wall_follow_enable and dist_traveled >= self.min_straight_travel:
+            if self.wall_target is None:
+                cand = []
+                if self.left_wall_dist is not None:
+                    cand.append((self.left_wall_dist, 1))
+                if self.right_wall_dist is not None:
+                    cand.append((self.right_wall_dist, -1))
+                if cand:
+                    cand.sort()                      # nearer side = the border
+                    self.wall_target, self.wall_side = cand[0]
+            if self.wall_target is not None:
+                d = self.left_wall_dist if self.wall_side > 0 else self.right_wall_dist
+                if d is not None:
+                    # +error (too far from wall) -> steer toward it; -error
+                    # (too close) -> steer AWAY. Never steers into the wall.
+                    steer += self.wall_side * self.wall_follow_kp * (d - self.wall_target)
+        steer = max(-MAX_HEADING_CORRECTION, min(MAX_HEADING_CORRECTION, steer))
+
         twist = Twist()
         twist.linear.x = self.linear_speed
-        twist.angular.z = self.heading_correction()
+        twist.angular.z = steer
         self.cmd_vel_pub.publish(twist)
         return False
 
