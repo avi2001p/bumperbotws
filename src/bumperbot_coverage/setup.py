@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'spiral_coverage = bumperbot_coverage.spiral_coverage:main',
             'stadium_coverage = bumperbot_coverage.stadium_coverage:main',
+            'wall_follow_coverage = bumperbot_coverage.wall_follow_coverage:main',
         ],
     },
 )
