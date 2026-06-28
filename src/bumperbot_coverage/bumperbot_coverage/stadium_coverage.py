@@ -175,6 +175,9 @@ class StadiumCoverageNode(Node):
         self.segment_start_y = 0.0
         self.segment_start_theta = 0.0
         self.heading_integral = 0.0
+        # Monotonic turned-angle accumulator for arcs (completes a FULL turn)
+        self.arc_accumulated = 0.0
+        self.arc_prev_theta = 0.0
 
         # --- Publishers / Subscribers ---
         self.cmd_vel_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
@@ -505,6 +508,9 @@ class StadiumCoverageNode(Node):
         self.segment_start_theta = self.theta
         # Reset heading integral so each straight starts clean
         self.heading_integral = 0.0
+        # Reset the arc turned-angle accumulator for the next segment
+        self.arc_accumulated = 0.0
+        self.arc_prev_theta = self.theta
 
         # Latch the turn-trigger distance for THIS segment: a STRAIGHT must end
         # turn_distance BEFORE the wall so the following arc clears the end wall.
@@ -614,10 +620,17 @@ class StadiumCoverageNode(Node):
         target_angle = params["angle"]
         arc_radius = params["radius"]
 
-        # Heading change since segment start
-        d_theta = abs(self.normalize_angle(self.theta - self.segment_start_theta))
+        # Accumulate the turned angle each cycle (monotonic — robust past 180°,
+        # and completes the FULL turn so the next straight starts ALIGNED).
+        # The old "0.95 * angle" test stopped the U-turn ~9° short, which left
+        # every straight pointing slightly inward → the robot drifted to the
+        # middle and ran out of room for the next semicircle.
+        self.arc_accumulated += abs(
+            self.normalize_angle(self.theta - self.arc_prev_theta)
+        )
+        self.arc_prev_theta = self.theta
 
-        if d_theta >= target_angle * 0.95:  # 95% threshold to handle overshoot
+        if self.arc_accumulated >= target_angle:
             self.stop_robot()
             return True
 
