@@ -206,8 +206,8 @@ WATER_SENSOR_PIN_1 = 12   # GPIO12 (Physical Pin 32) — water sensor 1
 WATER_SENSOR_PIN_2 = 16   # GPIO16 (Physical Pin 36) — water sensor 2
 # Kept for backward compatibility (== sensor 2)
 WATER_SENSOR_PIN = 16
-# Active level: True = HIGH when water detected
-WATER_SENSOR_ACTIVE_HIGH = True
+# Active level: these sensors read LOW when wet (verified on the robot), so False
+WATER_SENSOR_ACTIVE_HIGH = False
 # ==========================================================
 # COVERAGE GROUND DIMENSIONS (stadium shape)
 # ==========================================================

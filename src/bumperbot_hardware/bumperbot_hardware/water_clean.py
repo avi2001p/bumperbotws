@@ -43,9 +43,15 @@ class WaterClean(Node):
         self.declare_parameter("use_sensor1", True)    # GPIO12 (pin 32) — working
         self.declare_parameter("use_sensor2", False)   # GPIO16 (pin 36) — faulty module
         #   (set use_sensor2:=true if you replace the GPIO16 sensor later)
+        # On detection: run vacuum+fan for fan_duration, then ignore new
+        # detections for cooldown seconds before re-arming.
+        self.declare_parameter("fan_duration", 5.0)
+        self.declare_parameter("cooldown", 5.0)
         active_high = self.get_parameter("relay_active_high").value
         self.use_sensor1 = self.get_parameter("use_sensor1").value
         self.use_sensor2 = self.get_parameter("use_sensor2").value
+        self.fan_duration = self.get_parameter("fan_duration").value
+        self.cooldown = self.get_parameter("cooldown").value
         self.on = GPIO.HIGH if active_high else GPIO.LOW
         self.off = GPIO.LOW if active_high else GPIO.HIGH
 
@@ -59,7 +65,8 @@ class WaterClean(Node):
         # Tells the coverage node to pause/resume while cleaning
         self.pub = self.create_publisher(Bool, WATER_CLEANING_TOPIC, 10)
 
-        self.cleaning = False
+        self.state = "MONITORING"   # MONITORING -> CLEANING -> COOLDOWN -> MONITORING
+        self.t_mark = 0.0
         self.timer = self.create_timer(0.2, self.loop)   # 5 Hz
 
         self.get_logger().info(
@@ -73,27 +80,46 @@ class WaterClean(Node):
         level = GPIO.input(pin)
         return (level == GPIO.HIGH) if WATER_SENSOR_ACTIVE_HIGH else (level == GPIO.LOW)
 
-    def loop(self):
+    def now_sec(self):
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def water_detected(self):
         wet1 = self.use_sensor1 and self.sensor_wet(WATER_SENSOR_PIN_1)
         wet2 = self.use_sensor2 and self.sensor_wet(WATER_SENSOR_PIN_2)
-        water = wet1 or wet2
+        return wet1 or wet2
 
-        if water and not self.cleaning:
-            # Turn the vacuum + fan ON and pause coverage
-            GPIO.output(VACUUM_PUMP_PIN, self.on)
-            GPIO.output(DC_FAN_PIN, self.on)
-            self.cleaning = True
-            self.pub.publish(Bool(data=True))
-            self.get_logger().info(
-                f"WATER DETECTED (s1={wet1} s2={wet2}) -> VACUUM + FAN ON, coverage PAUSED"
-            )
-        elif not water and self.cleaning:
-            # Both dry again -> stop and resume coverage
-            GPIO.output(VACUUM_PUMP_PIN, self.off)
-            GPIO.output(DC_FAN_PIN, self.off)
-            self.cleaning = False
-            self.pub.publish(Bool(data=False))
-            self.get_logger().info("DRY -> VACUUM + FAN OFF, coverage RESUMED")
+    def loop(self):
+        now = self.now_sec()
+
+        if self.state == "MONITORING":
+            if self.water_detected():
+                # Detected -> run vacuum + fan for fan_duration, pause coverage
+                GPIO.output(VACUUM_PUMP_PIN, self.on)
+                GPIO.output(DC_FAN_PIN, self.on)
+                self.pub.publish(Bool(data=True))
+                self.state = "CLEANING"
+                self.t_mark = now
+                self.get_logger().info(
+                    f"WATER DETECTED -> VACUUM + FAN ON for {self.fan_duration:.0f}s, "
+                    f"coverage PAUSED"
+                )
+
+        elif self.state == "CLEANING":
+            if now - self.t_mark >= self.fan_duration:
+                GPIO.output(VACUUM_PUMP_PIN, self.off)
+                GPIO.output(DC_FAN_PIN, self.off)
+                self.pub.publish(Bool(data=False))
+                self.state = "COOLDOWN"
+                self.t_mark = now
+                self.get_logger().info(
+                    f"Cleaning done -> OFF, coverage RESUMED "
+                    f"(cooldown {self.cooldown:.0f}s before next detection)"
+                )
+
+        elif self.state == "COOLDOWN":
+            if now - self.t_mark >= self.cooldown:
+                self.state = "MONITORING"
+                self.get_logger().info("Ready — monitoring for water again.")
 
     def destroy_node(self):
         try:
