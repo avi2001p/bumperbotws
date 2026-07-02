@@ -39,7 +39,13 @@ class WaterClean(Node):
         # Relay polarity — most 5V boards are active-LOW (default). Pins are
         # driven OFF at startup regardless, so nothing runs unexpectedly.
         self.declare_parameter("relay_active_high", False)
+        # Per-sensor enable — set a bad/faulty sensor to false to ignore it.
+        self.declare_parameter("use_sensor1", True)    # GPIO12 (pin 32) — working
+        self.declare_parameter("use_sensor2", False)   # GPIO16 (pin 36) — faulty module
+        #   (set use_sensor2:=true if you replace the GPIO16 sensor later)
         active_high = self.get_parameter("relay_active_high").value
+        self.use_sensor1 = self.get_parameter("use_sensor1").value
+        self.use_sensor2 = self.get_parameter("use_sensor2").value
         self.on = GPIO.HIGH if active_high else GPIO.LOW
         self.off = GPIO.LOW if active_high else GPIO.HIGH
 
@@ -57,9 +63,10 @@ class WaterClean(Node):
         self.timer = self.create_timer(0.2, self.loop)   # 5 Hz
 
         self.get_logger().info(
-            f"Water clean started: EITHER sensor WET -> vacuum+fan ON. "
+            f"Water clean started: EITHER enabled sensor WET -> vacuum+fan ON. "
             f"vacuum=GPIO{VACUUM_PUMP_PIN} fan=GPIO{DC_FAN_PIN} "
-            f"sensors=GPIO{WATER_SENSOR_PIN_1},GPIO{WATER_SENSOR_PIN_2}"
+            f"sensor1(GPIO{WATER_SENSOR_PIN_1})={'ON' if self.use_sensor1 else 'OFF'} "
+            f"sensor2(GPIO{WATER_SENSOR_PIN_2})={'ON' if self.use_sensor2 else 'OFF'}"
         )
 
     def sensor_wet(self, pin):
@@ -67,8 +74,8 @@ class WaterClean(Node):
         return (level == GPIO.HIGH) if WATER_SENSOR_ACTIVE_HIGH else (level == GPIO.LOW)
 
     def loop(self):
-        wet1 = self.sensor_wet(WATER_SENSOR_PIN_1)
-        wet2 = self.sensor_wet(WATER_SENSOR_PIN_2)
+        wet1 = self.use_sensor1 and self.sensor_wet(WATER_SENSOR_PIN_1)
+        wet2 = self.use_sensor2 and self.sensor_wet(WATER_SENSOR_PIN_2)
         water = wet1 or wet2
 
         if water and not self.cleaning:
