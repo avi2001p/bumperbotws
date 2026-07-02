@@ -39,10 +39,10 @@ class WaterClean(Node):
         # Relay polarity — most 5V boards are active-LOW (default). Pins are
         # driven OFF at startup regardless, so nothing runs unexpectedly.
         self.declare_parameter("relay_active_high", False)
-        # Per-sensor enable — set a bad/faulty sensor to false to ignore it.
-        self.declare_parameter("use_sensor1", True)    # GPIO12 (pin 32) — working
-        self.declare_parameter("use_sensor2", False)   # GPIO16 (pin 36) — faulty module
-        #   (set use_sensor2:=true if you replace the GPIO16 sensor later)
+        # Per-sensor enable — both sensors active. Set one to false to ignore a
+        # faulty module (EITHER enabled sensor being wet turns the vacuum+fan on).
+        self.declare_parameter("use_sensor1", True)    # GPIO12 (pin 32)
+        self.declare_parameter("use_sensor2", True)    # GPIO16 (pin 36)
         # On detection: run vacuum+fan for fan_duration, then ignore new
         # detections for cooldown seconds before re-arming.
         self.declare_parameter("fan_duration", 5.0)
