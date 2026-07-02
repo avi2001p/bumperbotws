@@ -34,6 +34,7 @@ setup(
             'spin_test = bumperbot_hardware.spin_test:main',
             'arc_test = bumperbot_hardware.arc_test:main',
             'water_actuator = bumperbot_hardware.water_actuator:main',
+            'water_test = bumperbot_hardware.water_test:main',
             'calibrate_encoders = bumperbot_hardware.calibrate_encoders:main',
             'diagnose_slam = bumperbot_hardware.diagnose_slam:main',
         ],

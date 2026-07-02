@@ -60,18 +60,25 @@ class WaterActuator(Node):
         self.declare_parameter("fan_duration", FAN_ON_DURATION)
         self.declare_parameter("use_gpio_sensor", False)   # True = read GPIO directly
         self.declare_parameter("cooldown_time", 2.0)       # seconds after cleaning before re-checking
+        # Relay polarity: most cheap relay boards are ACTIVE-LOW (GPIO LOW = relay
+        # ON). Set this to match YOUR board (verify with water_test). Whatever it
+        # is, the pins are driven to OFF at startup so nothing runs unexpectedly.
+        self.declare_parameter("relay_active_high", False)
 
         self.fan_duration = self.get_parameter("fan_duration").value
         self.use_gpio_sensor = self.get_parameter("use_gpio_sensor").value
         self.cooldown_time = self.get_parameter("cooldown_time").value
+        self.relay_active_high = self.get_parameter("relay_active_high").value
+        self.RELAY_ON = GPIO.HIGH if self.relay_active_high else GPIO.LOW
+        self.RELAY_OFF = GPIO.LOW if self.relay_active_high else GPIO.HIGH
 
         # --- GPIO setup ---
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
 
-        # Actuator outputs (relays — active HIGH by default)
-        GPIO.setup(VACUUM_PUMP_PIN, GPIO.OUT, initial=GPIO.LOW)
-        GPIO.setup(DC_FAN_PIN, GPIO.OUT, initial=GPIO.LOW)
+        # Actuator outputs — driven to OFF at startup regardless of polarity
+        GPIO.setup(VACUUM_PUMP_PIN, GPIO.OUT, initial=self.RELAY_OFF)
+        GPIO.setup(DC_FAN_PIN, GPIO.OUT, initial=self.RELAY_OFF)
 
         # Water sensor input (if using GPIO directly)
         if self.use_gpio_sensor:
@@ -139,8 +146,8 @@ class WaterActuator(Node):
                 self.cleaning_start_time = now
 
                 # Activate actuators
-                GPIO.output(VACUUM_PUMP_PIN, GPIO.HIGH)
-                GPIO.output(DC_FAN_PIN, GPIO.HIGH)
+                GPIO.output(VACUUM_PUMP_PIN, self.RELAY_ON)
+                GPIO.output(DC_FAN_PIN, self.RELAY_ON)
                 self.get_logger().info(
                     f"  Vacuum: ON | Fan: ON (for {self.fan_duration}s)"
                 )
@@ -158,8 +165,8 @@ class WaterActuator(Node):
                 self.get_logger().info("✅ Cleaning cycle complete — Deactivating actuators")
 
                 # Deactivate actuators
-                GPIO.output(VACUUM_PUMP_PIN, GPIO.LOW)
-                GPIO.output(DC_FAN_PIN, GPIO.LOW)
+                GPIO.output(VACUUM_PUMP_PIN, self.RELAY_OFF)
+                GPIO.output(DC_FAN_PIN, self.RELAY_OFF)
 
                 # Enter cooldown before resuming
                 self.state = COOLDOWN
@@ -180,8 +187,8 @@ class WaterActuator(Node):
     def destroy_node(self):
         """Ensure actuators are OFF on shutdown."""
         try:
-            GPIO.output(VACUUM_PUMP_PIN, GPIO.LOW)
-            GPIO.output(DC_FAN_PIN, GPIO.LOW)
+            GPIO.output(VACUUM_PUMP_PIN, self.RELAY_OFF)
+            GPIO.output(DC_FAN_PIN, self.RELAY_OFF)
             GPIO.cleanup([VACUUM_PUMP_PIN, DC_FAN_PIN])
         except Exception:
             pass
