@@ -35,7 +35,8 @@ import RPi.GPIO as GPIO
 from bumperbot_hardware.parameters import (
     VACUUM_PUMP_PIN,
     DC_FAN_PIN,
-    WATER_SENSOR_PIN,
+    WATER_SENSOR_PIN_1,
+    WATER_SENSOR_PIN_2,
     WATER_SENSOR_ACTIVE_HIGH,
     FAN_ON_DURATION,
     WATER_DETECTED_TOPIC,
@@ -80,11 +81,12 @@ class WaterActuator(Node):
         GPIO.setup(VACUUM_PUMP_PIN, GPIO.OUT, initial=self.RELAY_OFF)
         GPIO.setup(DC_FAN_PIN, GPIO.OUT, initial=self.RELAY_OFF)
 
-        # Water sensor input (if using GPIO directly)
+        # Water sensor inputs (two sensors — trigger if EITHER is wet)
         if self.use_gpio_sensor:
-            GPIO.setup(WATER_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            GPIO.setup(WATER_SENSOR_PIN_1, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            GPIO.setup(WATER_SENSOR_PIN_2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
             self.get_logger().info(
-                f"GPIO water sensor enabled on pin {WATER_SENSOR_PIN}"
+                f"GPIO water sensors enabled on pins {WATER_SENSOR_PIN_1}, {WATER_SENSOR_PIN_2}"
             )
 
         # --- State ---
@@ -121,15 +123,15 @@ class WaterActuator(Node):
             self.water_trigger = True
 
     def read_gpio_sensor(self):
-        """Read water sensor directly from GPIO pin."""
+        """True if EITHER water sensor reads wet."""
         if not self.use_gpio_sensor:
             return False
-
-        level = GPIO.input(WATER_SENSOR_PIN)
-        if WATER_SENSOR_ACTIVE_HIGH:
-            return level == GPIO.HIGH
-        else:
-            return level == GPIO.LOW
+        for pin in (WATER_SENSOR_PIN_1, WATER_SENSOR_PIN_2):
+            level = GPIO.input(pin)
+            wet = (level == GPIO.HIGH) if WATER_SENSOR_ACTIVE_HIGH else (level == GPIO.LOW)
+            if wet:
+                return True
+        return False
 
     def main_loop(self):
         """State machine for water cleaning."""
