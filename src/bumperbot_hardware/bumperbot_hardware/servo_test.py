@@ -48,9 +48,10 @@ class ServoTest(Node):
         self.declare_parameter("angle", 90.0, num)
         self.declare_parameter("sweep", False)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)     # roller lifted (start)
-        # down_angle ABOVE up_angle => reverse direction; small gap => small rotation
-        self.declare_parameter("down_angle", 97.0, num)   # roller down (small, reversed)
+        self.declare_parameter("up_angle", 90.0, num)      # roller OFF the surface
+        # rotation = |down_angle - up_angle| deg. Roller must reach the surface,
+        # so this is a big travel; find the real value with single-angle mode.
+        self.declare_parameter("down_angle", 120.0, num)   # roller ON the surface
         self.declare_parameter("hold", 5.0, num)          # seconds down
         self.declare_parameter("smooth_time", 0.8, num)   # seconds per move
         self.declare_parameter("repeat", False)
@@ -112,15 +113,15 @@ class ServoTest(Node):
         self.pwm.ChangeDutyCycle(0)     # stop signal -> servo holds, no buzz
 
     def move_smooth(self, from_a, to_a, dur=None, steps=25):
-        """Ease from `from_a` to `to_a`, then release the signal (no vibration)."""
+        """Ease from `from_a` to `to_a` and HOLD there so the roller stays put
+        (does not droop). Continuous PWM may buzz slightly on an SG90."""
         if dur is None:
             dur = self.smooth_time
         for i in range(steps + 1):
             a = from_a + (to_a - from_a) * (i / steps)
             self._apply(a)
             time.sleep(dur / steps)
-        time.sleep(0.15)     # let it settle at the target
-        self._release()
+        # keep holding at the target (no release) so the position is maintained
 
     def destroy_node(self):
         try:
