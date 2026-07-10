@@ -39,8 +39,14 @@ class ServoTest(Node):
     def __init__(self):
         super().__init__("servo_test")
 
-        self.declare_parameter("angle", 90.0)      # 0..180 deg
+        self.declare_parameter("angle", 90.0)      # 0..180 deg (hold one angle)
         self.declare_parameter("sweep", False)     # sweep the full range
+        # Roller cycle: go DOWN a little, hold, come back UP (the real motion)
+        self.declare_parameter("cycle", False)
+        self.declare_parameter("up_angle", 90.0)    # roller lifted
+        self.declare_parameter("down_angle", 70.0)  # roller down (small rotation)
+        self.declare_parameter("hold", 5.0)         # seconds down
+        self.declare_parameter("repeat", False)     # loop the cycle
         self.declare_parameter("min_pulse_ms", SERVO_MIN_PULSE_MS)
         self.declare_parameter("max_pulse_ms", SERVO_MAX_PULSE_MS)
 
@@ -48,6 +54,11 @@ class ServoTest(Node):
         self.max_ms = self.get_parameter("max_pulse_ms").value
         angle = self.get_parameter("angle").value
         sweep = self.get_parameter("sweep").value
+        cycle = self.get_parameter("cycle").value
+        up_angle = self.get_parameter("up_angle").value
+        down_angle = self.get_parameter("down_angle").value
+        hold = self.get_parameter("hold").value
+        repeat = self.get_parameter("repeat").value
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
@@ -59,7 +70,22 @@ class ServoTest(Node):
             f"Servo on GPIO{SERVO_PIN}. Pulse {self.min_ms}-{self.max_ms} ms for 0-180 deg."
         )
 
-        if sweep:
+        if cycle:
+            # Roller motion: start UP, then DOWN (small rotation), hold, back UP.
+            self.set_angle(up_angle)
+            self.get_logger().info(f"UP = {up_angle:.0f} deg")
+            time.sleep(1.0)
+            while True:
+                self.set_angle(down_angle)
+                self.get_logger().info(f"DOWN = {down_angle:.0f} deg — holding {hold:.0f}s")
+                time.sleep(hold)
+                self.set_angle(up_angle)
+                self.get_logger().info(f"UP = {up_angle:.0f} deg")
+                if not repeat:
+                    break
+                time.sleep(2.0)
+            self.get_logger().info("Cycle done — holding UP. Ctrl+C to exit.")
+        elif sweep:
             angles = list(range(0, 181, 10)) + list(range(180, -1, -10))
             for a in angles:
                 self.set_angle(a)
