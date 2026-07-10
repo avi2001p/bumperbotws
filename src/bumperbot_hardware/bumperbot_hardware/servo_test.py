@@ -46,6 +46,9 @@ class ServoTest(Node):
         self.declare_parameter("up_angle", 20.0, num)      # roller UP (initial)
         self.declare_parameter("down_angle", 0.0, num)     # roller DOWN
         self.declare_parameter("hold", 5.0, num)           # seconds down
+        # Climb this many degrees PAST up_angle, then settle back on it —
+        # compensates the servo landing short when lifting the roller.
+        self.declare_parameter("up_overshoot", 15.0, num)
         self.declare_parameter("smooth_time", 0.8, num)    # seconds per move
         self.declare_parameter("repeat", False)
         self.declare_parameter("min_us", int(SERVO_MIN_PULSE_MS * 1000))   # 500
@@ -59,6 +62,7 @@ class ServoTest(Node):
         up_angle = float(self.get_parameter("up_angle").value)
         down_angle = float(self.get_parameter("down_angle").value)
         hold = float(self.get_parameter("hold").value)
+        up_overshoot = float(self.get_parameter("up_overshoot").value)
         repeat = self.get_parameter("repeat").value
 
         self.pi = pigpio.pi()
@@ -80,11 +84,11 @@ class ServoTest(Node):
                 self.move_smooth(up_angle, down_angle)
                 self.get_logger().info(f"DOWN = {down_angle:.0f} deg — hold {hold:.0f}s")
                 time.sleep(hold)
-                # Climb slightly PAST the target, then snap back onto it —
-                # cancels the few degrees the servo settles short when
-                # climbing slowly under the roller's weight.
-                overshoot = 8.0 if up_angle > down_angle else -8.0
-                self.move_smooth(down_angle, up_angle + overshoot)
+                # Climb PAST the target by up_overshoot, then settle back onto
+                # it — cancels the degrees the servo lands short when lifting
+                # the roller. E.g. down 30, pull back 45, settle at start.
+                oshoot = up_overshoot if up_angle > down_angle else -up_overshoot
+                self.move_smooth(down_angle, up_angle + oshoot)
                 time.sleep(0.3)
                 self._apply(up_angle)
                 self.get_logger().info(f"UP = {up_angle:.0f} deg (back to initial)")
