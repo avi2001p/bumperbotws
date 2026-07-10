@@ -2,13 +2,16 @@
 """
 water_clean.py
 --------------
-Simple, direct water cleaning:
-  * If EITHER of the two water sensors detects water -> vacuum pump + fan ON.
-  * When BOTH sensors are dry            -> vacuum pump + fan OFF.
+Water extraction sequence. When EITHER water sensor detects water:
 
-It also publishes /water_cleaning_active so the coverage node PAUSES while
-cleaning and RESUMES when dry. Use this instead of water_actuator for a
-keep-cleaning-until-dry behaviour.
+  1. STOP + CLEAN  (fan_duration s): vacuum + fan ON, coverage PAUSED, roller UP.
+  2. ROLL          (roller_run_duration s): vacuum + fan OFF, coverage RESUMES,
+                    roller DOWN and rolling while the robot drives.
+  3. Roller UP, then COOLDOWN before the next detection.
+
+Publishes /water_cleaning_active so the coverage node pauses (step 1) and resumes
+(step 2). Relays via RPi.GPIO; roller servo via pigpio (needs `sudo pigpiod`;
+if it isn't running the roller is skipped and the rest still works).
 
 Run:
   ros2 run bumperbot_hardware water_clean
@@ -20,6 +23,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 
 import RPi.GPIO as GPIO
+import pigpio
 
 from bumperbot_hardware.parameters import (
     VACUUM_PUMP_PIN,
@@ -28,6 +32,12 @@ from bumperbot_hardware.parameters import (
     WATER_SENSOR_PIN_2,
     WATER_SENSOR_ACTIVE_HIGH,
     WATER_CLEANING_TOPIC,
+    SERVO_PIN,
+    SERVO_MIN_PULSE_MS,
+    SERVO_MAX_PULSE_MS,
+    ROLLER_UP_ANGLE,
+    ROLLER_DOWN_ANGLE,
+    ROLLER_RUN_DURATION,
 )
 
 
@@ -47,11 +57,13 @@ class WaterClean(Node):
         # detections for cooldown seconds before re-arming.
         self.declare_parameter("fan_duration", 5.0)
         self.declare_parameter("cooldown", 5.0)
+        self.declare_parameter("roller_run_duration", ROLLER_RUN_DURATION)
         active_high = self.get_parameter("relay_active_high").value
         self.use_sensor1 = self.get_parameter("use_sensor1").value
         self.use_sensor2 = self.get_parameter("use_sensor2").value
         self.fan_duration = self.get_parameter("fan_duration").value
         self.cooldown = self.get_parameter("cooldown").value
+        self.roller_run_duration = self.get_parameter("roller_run_duration").value
         self.on = GPIO.HIGH if active_high else GPIO.LOW
         self.off = GPIO.LOW if active_high else GPIO.HIGH
 
@@ -61,6 +73,20 @@ class WaterClean(Node):
         GPIO.setup(DC_FAN_PIN, GPIO.OUT, initial=self.off)
         GPIO.setup(WATER_SENSOR_PIN_1, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         GPIO.setup(WATER_SENSOR_PIN_2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
+        # --- Roller servo via pigpio (starts lifted UP) ---
+        self.min_us = int(SERVO_MIN_PULSE_MS * 1000)
+        self.max_us = int(SERVO_MAX_PULSE_MS * 1000)
+        self.pi = pigpio.pi()
+        if self.pi is not None and self.pi.connected:
+            self.set_roller(ROLLER_UP_ANGLE)
+            self.get_logger().info(f"Roller servo ready on GPIO{SERVO_PIN} (UP).")
+        else:
+            self.pi = None
+            self.get_logger().warn(
+                "pigpio not running -> roller DISABLED (start it: sudo pigpiod). "
+                "Water cleaning still works without the roller."
+            )
 
         # Tells the coverage node to pause/resume while cleaning
         self.pub = self.create_publisher(Bool, WATER_CLEANING_TOPIC, 10)
@@ -82,6 +108,14 @@ class WaterClean(Node):
 
     def now_sec(self):
         return self.get_clock().now().nanoseconds * 1e-9
+
+    def set_roller(self, angle):
+        """Move the roller servo to `angle` (pigpio holds it silently)."""
+        if self.pi is None:
+            return
+        angle = max(0.0, min(180.0, angle))
+        us = int(self.min_us + (angle / 180.0) * (self.max_us - self.min_us))
+        self.pi.set_servo_pulsewidth(SERVO_PIN, us)
 
     def water_detected(self):
         wet1 = self.use_sensor1 and self.sensor_wet(WATER_SENSOR_PIN_1)
@@ -106,14 +140,26 @@ class WaterClean(Node):
 
         elif self.state == "CLEANING":
             if now - self.t_mark >= self.fan_duration:
+                # Vacuum+fan done -> resume driving, then roll while moving
                 GPIO.output(VACUUM_PUMP_PIN, self.off)
                 GPIO.output(DC_FAN_PIN, self.off)
-                self.pub.publish(Bool(data=False))
+                self.pub.publish(Bool(data=False))     # coverage RESUMES (robot moves)
+                self.set_roller(ROLLER_DOWN_ANGLE)     # roller DOWN
+                self.state = "ROLLING"
+                self.t_mark = now
+                self.get_logger().info(
+                    f"Vacuum+fan OFF, coverage RESUMED. Roller DOWN for "
+                    f"{self.roller_run_duration:.0f}s while moving."
+                )
+
+        elif self.state == "ROLLING":
+            # Robot is driving with the roller down; lift it after the run time
+            if now - self.t_mark >= self.roller_run_duration:
+                self.set_roller(ROLLER_UP_ANGLE)       # roller UP
                 self.state = "COOLDOWN"
                 self.t_mark = now
                 self.get_logger().info(
-                    f"Cleaning done -> OFF, coverage RESUMED "
-                    f"(cooldown {self.cooldown:.0f}s before next detection)"
+                    f"Roller UP. Cooldown {self.cooldown:.0f}s before next detection."
                 )
 
         elif self.state == "COOLDOWN":
@@ -126,6 +172,13 @@ class WaterClean(Node):
             GPIO.output(VACUUM_PUMP_PIN, self.off)
             GPIO.output(DC_FAN_PIN, self.off)
             GPIO.cleanup()
+        except Exception:
+            pass
+        try:
+            if self.pi is not None:
+                self.set_roller(ROLLER_UP_ANGLE)              # park roller up
+                self.pi.set_servo_pulsewidth(SERVO_PIN, 0)    # release
+                self.pi.stop()
         except Exception:
             pass
         super().destroy_node()

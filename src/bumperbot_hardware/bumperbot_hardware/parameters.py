@@ -212,9 +212,9 @@ WATER_SENSOR_ACTIVE_HIGH = False
 # ROLLER SERVO (SG90) — lifts/lowers the squeegee roller
 # ==========================================================
 SERVO_PIN = 13          # GPIO13 (Physical Pin 33) — hardware-PWM capable, free
-# Angles (degrees) — CALIBRATE with servo_test, then set these:
-ROLLER_UP_ANGLE = 0.0     # roller lifted (default / driving)  >>> calibrate
-ROLLER_DOWN_ANGLE = 90.0  # roller on the ground (cleaning)    >>> calibrate
+# Angles (degrees) — CALIBRATED on the robot with servo_test:
+ROLLER_UP_ANGLE = 90.0    # roller lifted (driving / idle)
+ROLLER_DOWN_ANGLE = 80.0  # roller down (cleaning) — 10 deg below up
 # SG90 pulse widths (ms) for 0..180 deg (tune if range is off)
 SERVO_MIN_PULSE_MS = 0.5
 SERVO_MAX_PULSE_MS = 2.5

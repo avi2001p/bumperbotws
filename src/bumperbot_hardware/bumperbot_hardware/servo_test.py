@@ -2,28 +2,22 @@
 """
 servo_test.py
 -------------
-SG90 roller servo test / calibration — driven by **pigpio** (hardware-timed PWM).
+SG90 roller servo test / calibration — driven by pigpio (smooth, SILENT, HOLDS).
 
-Why pigpio: RPi.GPIO software PWM makes servos buzz/vibrate, drift, and move
-inconsistently. pigpio is smooth and silent, and HOLDS the commanded position
-firmly, so the roller returns to the exact initial point and stays there.
+pigpio holds the commanded position firmly and silently (no buzz, no droop), so
+the roller returns to the exact initial point and stays there.
 
->>> Start the pigpio daemon ONCE before running (survives until reboot):
-        sudo pigpiod
-    If it's missing:   sudo apt install pigpio python3-pigpio
+>>> Start the daemon once (survives until reboot):   sudo pigpiod
+
+On this robot:  DOWN = low angle (0),  UP = higher angle.
 
 Modes:
-  # roller cycle: UP -> DOWN (on surface) -> hold -> back to UP (initial)
+  # roller cycle: UP -> DOWN -> hold 5s -> back to UP (same distance)
   ros2 run bumperbot_hardware servo_test --ros-args \
-      -p cycle:=true -p up_angle:=90 -p down_angle:=115 -p hold:=5.0
+      -p cycle:=true -p up_angle:=20 -p down_angle:=0 -p hold:=5.0
 
   # hold a single angle (to find UP / DOWN)
-  ros2 run bumperbot_hardware servo_test --ros-args -p angle:=90
-
-Tuning:
-  down_angle > up_angle  -> one direction;  down_angle < up_angle -> the other.
-  rotation = |down_angle - up_angle| degrees.
-  smooth_time = seconds per move.
+  ros2 run bumperbot_hardware servo_test --ros-args -p angle:=0
 """
 
 import time
@@ -47,16 +41,15 @@ class ServoTest(Node):
         super().__init__("servo_test")
 
         num = ParameterDescriptor(dynamic_typing=True)
-        self.declare_parameter("angle", 90.0, num)
+        self.declare_parameter("angle", 0.0, num)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)     # roller UP (initial)
-        # 90 -> 110 went UP, so DOWN is the other way: 90 -> 70 (angle decreases)
-        self.declare_parameter("down_angle", 70.0, num)   # roller DOWN
+        self.declare_parameter("up_angle", 20.0, num)      # roller UP (initial)
+        self.declare_parameter("down_angle", 0.0, num)     # roller DOWN
         self.declare_parameter("hold", 5.0, num)           # seconds down
         self.declare_parameter("smooth_time", 0.8, num)    # seconds per move
         self.declare_parameter("repeat", False)
-        self.declare_parameter("min_us", int(SERVO_MIN_PULSE_MS * 1000))   # 0.5 ms -> 500 us
-        self.declare_parameter("max_us", int(SERVO_MAX_PULSE_MS * 1000))   # 2.5 ms -> 2500 us
+        self.declare_parameter("min_us", int(SERVO_MIN_PULSE_MS * 1000))   # 500
+        self.declare_parameter("max_us", int(SERVO_MAX_PULSE_MS * 1000))   # 2500
 
         self.min_us = int(self.get_parameter("min_us").value)
         self.max_us = int(self.get_parameter("max_us").value)
@@ -71,8 +64,7 @@ class ServoTest(Node):
         self.pi = pigpio.pi()
         if not self.pi.connected:
             self.get_logger().error(
-                "pigpio daemon is NOT running. Start it with:  sudo pigpiod   "
-                "(install once:  sudo apt install pigpio python3-pigpio)"
+                "pigpio daemon is NOT running. Start it with:  sudo pigpiod"
             )
             raise RuntimeError("pigpiod not running")
 
@@ -88,7 +80,13 @@ class ServoTest(Node):
                 self.move_smooth(up_angle, down_angle)
                 self.get_logger().info(f"DOWN = {down_angle:.0f} deg — hold {hold:.0f}s")
                 time.sleep(hold)
-                self.move_smooth(down_angle, up_angle)
+                # Climb slightly PAST the target, then snap back onto it —
+                # cancels the few degrees the servo settles short when
+                # climbing slowly under the roller's weight.
+                overshoot = 8.0 if up_angle > down_angle else -8.0
+                self.move_smooth(down_angle, up_angle + overshoot)
+                time.sleep(0.3)
+                self._apply(up_angle)
                 self.get_logger().info(f"UP = {up_angle:.0f} deg (back to initial)")
                 if not repeat:
                     break
@@ -106,11 +104,10 @@ class ServoTest(Node):
         self.pi.set_servo_pulsewidth(SERVO_PIN, self._us(a))
 
     def _release(self):
-        self.pi.set_servo_pulsewidth(SERVO_PIN, 0)   # stop pulses (servo goes limp)
+        self.pi.set_servo_pulsewidth(SERVO_PIN, 0)
 
     def move_smooth(self, from_a, to_a, steps=40):
-        """Ease from `from_a` to `to_a`. pigpio then keeps holding the target —
-        silent and drift-free, so it stays exactly where commanded."""
+        """Ease from `from_a` to `to_a`; pigpio then holds the target silently."""
         dur = self.smooth_time
         for i in range(steps + 1):
             a = from_a + (to_a - from_a) * (i / steps)
