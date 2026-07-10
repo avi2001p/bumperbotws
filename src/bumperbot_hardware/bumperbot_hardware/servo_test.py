@@ -48,8 +48,9 @@ class ServoTest(Node):
         self.declare_parameter("angle", 90.0, num)
         self.declare_parameter("sweep", False)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)     # roller lifted
-        self.declare_parameter("down_angle", 80.0, num)   # roller down (small rotation)
+        self.declare_parameter("up_angle", 90.0, num)     # roller lifted (start)
+        # down_angle ABOVE up_angle => reverse direction; small gap => small rotation
+        self.declare_parameter("down_angle", 97.0, num)   # roller down (small, reversed)
         self.declare_parameter("hold", 5.0, num)          # seconds down
         self.declare_parameter("smooth_time", 0.8, num)   # seconds per move
         self.declare_parameter("repeat", False)
