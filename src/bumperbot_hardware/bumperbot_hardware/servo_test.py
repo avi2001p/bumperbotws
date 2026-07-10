@@ -49,9 +49,9 @@ class ServoTest(Node):
         self.declare_parameter("sweep", False)
         self.declare_parameter("cycle", False)
         self.declare_parameter("up_angle", 90.0, num)      # roller UP (off surface)
-        # DOWN = angle INCREASES (90 -> 125) because decreasing went upward.
-        # ~35 deg travel. Returns to up_angle (90) = the initial position.
-        self.declare_parameter("down_angle", 125.0, num)   # roller DOWN (on surface)
+        # DOWN = angle INCREASES (90 -> 115) because decreasing went upward.
+        # ~25 deg travel. Returns to up_angle (90) = the initial position.
+        self.declare_parameter("down_angle", 115.0, num)   # roller DOWN (on surface)
         self.declare_parameter("hold", 5.0, num)          # seconds down
         self.declare_parameter("smooth_time", 0.8, num)   # seconds per move
         self.declare_parameter("repeat", False)
