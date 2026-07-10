@@ -49,8 +49,9 @@ class ServoTest(Node):
         num = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter("angle", 90.0, num)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)      # roller UP (off surface)
-        self.declare_parameter("down_angle", 115.0, num)   # roller DOWN (on surface)
+        self.declare_parameter("up_angle", 90.0, num)     # roller UP (initial)
+        # 90 -> 110 went UP, so DOWN is the other way: 90 -> 70 (angle decreases)
+        self.declare_parameter("down_angle", 70.0, num)   # roller DOWN
         self.declare_parameter("hold", 5.0, num)           # seconds down
         self.declare_parameter("smooth_time", 0.8, num)    # seconds per move
         self.declare_parameter("repeat", False)
