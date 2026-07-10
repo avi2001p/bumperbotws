@@ -2,22 +2,26 @@
 """
 servo_test.py
 -------------
-SG90 servo calibration for the roller lift. Moves the servo to a chosen angle and
-HOLDS it, so you can find the angle for roller UP and roller DOWN.
+SG90 roller servo test / calibration.
 
-Usage:
-  # hold a single angle (try several to find UP and DOWN)
-  ros2 run bumperbot_hardware servo_test --ros-args -p angle:=0
+Moves SMOOTHLY (gradual steps) and then RELEASES the PWM signal so the servo
+holds still WITHOUT the buzzing/vibration you get from continuous software PWM.
+
+Modes:
+  # roller motion: smooth UP->DOWN, hold, smooth DOWN->UP
+  ros2 run bumperbot_hardware servo_test --ros-args \
+      -p cycle:=true -p up_angle:=90 -p down_angle:=80 -p hold:=5.0
+
+  # hold a single angle (to find UP / DOWN positions)
   ros2 run bumperbot_hardware servo_test --ros-args -p angle:=90
 
-  # slowly sweep 0..180..0 to see the full travel
+  # sweep the whole range
   ros2 run bumperbot_hardware servo_test --ros-args -p sweep:=true
 
-Once you know the two angles, put them in parameters.py:
-  ROLLER_UP_ANGLE   = <angle where the roller is lifted>
-  ROLLER_DOWN_ANGLE = <angle where the roller touches the ground>
-
-If the servo can't reach an end, widen SERVO_MIN_PULSE_MS / SERVO_MAX_PULSE_MS.
+Tuning:
+  up_angle / down_angle : the two roller positions (smaller gap = less rotation)
+  smooth_time           : seconds for each up/down move (bigger = slower/smoother)
+  repeat:=true          : loop the cycle
 """
 
 import time
@@ -40,21 +44,21 @@ class ServoTest(Node):
     def __init__(self):
         super().__init__("servo_test")
 
-        # dynamic_typing so 90 (int) or 90.0 (float) both work on the CLI
-        num = ParameterDescriptor(dynamic_typing=True)
-        self.declare_parameter("angle", 90.0, num)      # 0..180 deg (hold one angle)
-        self.declare_parameter("sweep", False)          # sweep the full range
-        # Roller cycle: go DOWN a little, hold, come back UP (the real motion)
+        num = ParameterDescriptor(dynamic_typing=True)   # accept int or float
+        self.declare_parameter("angle", 90.0, num)
+        self.declare_parameter("sweep", False)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)    # roller lifted
-        self.declare_parameter("down_angle", 70.0, num)  # roller down (small rotation)
-        self.declare_parameter("hold", 5.0, num)         # seconds down
-        self.declare_parameter("repeat", False)          # loop the cycle
+        self.declare_parameter("up_angle", 90.0, num)     # roller lifted
+        self.declare_parameter("down_angle", 80.0, num)   # roller down (small rotation)
+        self.declare_parameter("hold", 5.0, num)          # seconds down
+        self.declare_parameter("smooth_time", 0.8, num)   # seconds per move
+        self.declare_parameter("repeat", False)
         self.declare_parameter("min_pulse_ms", SERVO_MIN_PULSE_MS, num)
         self.declare_parameter("max_pulse_ms", SERVO_MAX_PULSE_MS, num)
 
         self.min_ms = float(self.get_parameter("min_pulse_ms").value)
         self.max_ms = float(self.get_parameter("max_pulse_ms").value)
+        self.smooth_time = float(self.get_parameter("smooth_time").value)
         angle = float(self.get_parameter("angle").value)
         sweep = self.get_parameter("sweep").value
         cycle = self.get_parameter("cycle").value
@@ -66,48 +70,56 @@ class ServoTest(Node):
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         GPIO.setup(SERVO_PIN, GPIO.OUT)
-        self.pwm = GPIO.PWM(SERVO_PIN, 50)   # 50 Hz for hobby servos
+        self.pwm = GPIO.PWM(SERVO_PIN, 50)   # 50 Hz
         self.pwm.start(0)
 
         self.get_logger().info(
-            f"Servo on GPIO{SERVO_PIN}. Pulse {self.min_ms}-{self.max_ms} ms for 0-180 deg."
+            f"Servo on GPIO{SERVO_PIN}. Smooth move + signal-release (no buzz)."
         )
 
         if cycle:
-            # Roller motion: start UP, then DOWN (small rotation), hold, back UP.
-            self.set_angle(up_angle)
+            self.move_smooth(up_angle, up_angle)          # settle at UP, release
             self.get_logger().info(f"UP = {up_angle:.0f} deg")
-            time.sleep(1.0)
+            time.sleep(0.5)
             while True:
-                self.set_angle(down_angle)
-                self.get_logger().info(f"DOWN = {down_angle:.0f} deg — holding {hold:.0f}s")
+                self.move_smooth(up_angle, down_angle)    # smooth DOWN
+                self.get_logger().info(f"DOWN = {down_angle:.0f} deg — hold {hold:.0f}s (silent)")
                 time.sleep(hold)
-                self.set_angle(up_angle)
+                self.move_smooth(down_angle, up_angle)    # smooth UP
                 self.get_logger().info(f"UP = {up_angle:.0f} deg")
                 if not repeat:
                     break
-                time.sleep(2.0)
-            self.get_logger().info("Cycle done — holding UP. Ctrl+C to exit.")
+                time.sleep(1.0)
+            self.get_logger().info("Cycle done — released at UP. Ctrl+C to exit.")
         elif sweep:
-            angles = list(range(0, 181, 10)) + list(range(180, -1, -10))
-            for a in angles:
-                self.set_angle(a)
-                self.get_logger().info(f"angle = {a} deg")
-                time.sleep(0.4)
-            self.get_logger().info("Sweep done — holding 90 deg. Ctrl+C to exit.")
-            self.set_angle(90.0)
+            self.move_smooth(90.0, 0.0, dur=1.2)
+            self.move_smooth(0.0, 180.0, dur=2.0)
+            self.move_smooth(180.0, 90.0, dur=1.2)
+            self.get_logger().info("Sweep done — released at 90. Ctrl+C to exit.")
         else:
-            self.set_angle(angle)
+            self.move_smooth(90.0, angle)
             self.get_logger().info(
-                f"Holding angle = {angle} deg. Note this for UP or DOWN. Ctrl+C to exit."
+                f"At {angle:.0f} deg (signal released — no buzz). Ctrl+C to exit."
             )
 
-    def set_angle(self, angle):
-        """Move to `angle` (0..180) and keep holding (PWM stays on)."""
-        angle = max(0.0, min(180.0, angle))
-        pulse_ms = self.min_ms + (angle / 180.0) * (self.max_ms - self.min_ms)
-        duty = pulse_ms / 20.0 * 100.0       # 50 Hz => 20 ms period
-        self.pwm.ChangeDutyCycle(duty)
+    def _apply(self, a):
+        a = max(0.0, min(180.0, a))
+        pulse_ms = self.min_ms + (a / 180.0) * (self.max_ms - self.min_ms)
+        self.pwm.ChangeDutyCycle(pulse_ms / 20.0 * 100.0)   # 50 Hz -> 20 ms period
+
+    def _release(self):
+        self.pwm.ChangeDutyCycle(0)     # stop signal -> servo holds, no buzz
+
+    def move_smooth(self, from_a, to_a, dur=None, steps=25):
+        """Ease from `from_a` to `to_a`, then release the signal (no vibration)."""
+        if dur is None:
+            dur = self.smooth_time
+        for i in range(steps + 1):
+            a = from_a + (to_a - from_a) * (i / steps)
+            self._apply(a)
+            time.sleep(dur / steps)
+        time.sleep(0.15)     # let it settle at the target
+        self._release()
 
     def destroy_node(self):
         try:
