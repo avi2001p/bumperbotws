@@ -36,6 +36,7 @@ setup(
             'water_actuator = bumperbot_hardware.water_actuator:main',
             'water_clean = bumperbot_hardware.water_clean:main',
             'water_test = bumperbot_hardware.water_test:main',
+            'servo_test = bumperbot_hardware.servo_test:main',
             'calibrate_encoders = bumperbot_hardware.calibrate_encoders:main',
             'diagnose_slam = bumperbot_hardware.diagnose_slam:main',
         ],
