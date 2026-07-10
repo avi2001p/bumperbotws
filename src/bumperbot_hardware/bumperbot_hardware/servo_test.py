@@ -77,7 +77,7 @@ class ServoTest(Node):
         )
 
         if cycle:
-            self._apply(up_angle)
+            self.goto_start(up_angle)
             self.get_logger().info(f"UP = {up_angle:.0f} deg (held)")
             time.sleep(0.6)
             while True:
@@ -110,6 +110,17 @@ class ServoTest(Node):
     def _release(self):
         self.pi.set_servo_pulsewidth(SERVO_PIN, 0)
 
+    def goto_start(self, target):
+        """Move to the start position SMOOTHLY from wherever the servo is now.
+        pigpiod remembers the last commanded pulse, so if a previous run left
+        the servo held, we glide from there instead of jumping."""
+        cur_us = self.pi.get_servo_pulsewidth(SERVO_PIN)
+        if cur_us > 0:
+            cur_angle = (cur_us - self.min_us) / (self.max_us - self.min_us) * 180.0
+            self.move_smooth(cur_angle, target)
+        else:
+            self._apply(target)   # unknown position (first run) — direct set
+
     def move_smooth(self, from_a, to_a, steps=40):
         """Ease from `from_a` to `to_a`; pigpio then holds the target silently."""
         dur = self.smooth_time
@@ -120,7 +131,8 @@ class ServoTest(Node):
 
     def destroy_node(self):
         try:
-            self._release()
+            # Do NOT release: pigpiod keeps holding the last position after we
+            # exit, so the roller stays parked instead of drooping down.
             self.pi.stop()
         except Exception:
             pass
