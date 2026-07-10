@@ -48,10 +48,10 @@ class ServoTest(Node):
         self.declare_parameter("angle", 90.0, num)
         self.declare_parameter("sweep", False)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0, num)     # roller UP (off surface)
-        # DOWN = 20 deg DOWNWARDS => angle decreases (90 -> 70). If the roller
-        # actually goes UP with this, flip to 110 (angle increases).
-        self.declare_parameter("down_angle", 70.0, num)   # roller DOWN (on surface)
+        self.declare_parameter("up_angle", 90.0, num)      # roller UP (off surface)
+        # DOWN = angle INCREASES (90 -> 115) because decreasing went upward.
+        # ~25 deg travel. Returns to up_angle (90) = the initial position.
+        self.declare_parameter("down_angle", 115.0, num)   # roller DOWN (on surface)
         self.declare_parameter("hold", 5.0, num)          # seconds down
         self.declare_parameter("smooth_time", 0.8, num)   # seconds per move
         self.declare_parameter("repeat", False)
@@ -122,8 +122,8 @@ class ServoTest(Node):
             a = from_a + (to_a - from_a) * (i / steps)
             self._apply(a)
             time.sleep(dur / steps)
-        time.sleep(0.25)     # let it arrive at the target
-        self._release()      # stop the pulse -> no vibration
+        time.sleep(0.5)      # hold briefly so it FULLY reaches the target,
+        self._release()      # then stop the pulse -> no vibration at rest
 
     def destroy_node(self):
         try:
