@@ -24,6 +24,7 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import ParameterDescriptor
 
 import RPi.GPIO as GPIO
 
@@ -39,25 +40,27 @@ class ServoTest(Node):
     def __init__(self):
         super().__init__("servo_test")
 
-        self.declare_parameter("angle", 90.0)      # 0..180 deg (hold one angle)
-        self.declare_parameter("sweep", False)     # sweep the full range
+        # dynamic_typing so 90 (int) or 90.0 (float) both work on the CLI
+        num = ParameterDescriptor(dynamic_typing=True)
+        self.declare_parameter("angle", 90.0, num)      # 0..180 deg (hold one angle)
+        self.declare_parameter("sweep", False)          # sweep the full range
         # Roller cycle: go DOWN a little, hold, come back UP (the real motion)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 90.0)    # roller lifted
-        self.declare_parameter("down_angle", 70.0)  # roller down (small rotation)
-        self.declare_parameter("hold", 5.0)         # seconds down
-        self.declare_parameter("repeat", False)     # loop the cycle
-        self.declare_parameter("min_pulse_ms", SERVO_MIN_PULSE_MS)
-        self.declare_parameter("max_pulse_ms", SERVO_MAX_PULSE_MS)
+        self.declare_parameter("up_angle", 90.0, num)    # roller lifted
+        self.declare_parameter("down_angle", 70.0, num)  # roller down (small rotation)
+        self.declare_parameter("hold", 5.0, num)         # seconds down
+        self.declare_parameter("repeat", False)          # loop the cycle
+        self.declare_parameter("min_pulse_ms", SERVO_MIN_PULSE_MS, num)
+        self.declare_parameter("max_pulse_ms", SERVO_MAX_PULSE_MS, num)
 
-        self.min_ms = self.get_parameter("min_pulse_ms").value
-        self.max_ms = self.get_parameter("max_pulse_ms").value
-        angle = self.get_parameter("angle").value
+        self.min_ms = float(self.get_parameter("min_pulse_ms").value)
+        self.max_ms = float(self.get_parameter("max_pulse_ms").value)
+        angle = float(self.get_parameter("angle").value)
         sweep = self.get_parameter("sweep").value
         cycle = self.get_parameter("cycle").value
-        up_angle = self.get_parameter("up_angle").value
-        down_angle = self.get_parameter("down_angle").value
-        hold = self.get_parameter("hold").value
+        up_angle = float(self.get_parameter("up_angle").value)
+        down_angle = float(self.get_parameter("down_angle").value)
+        hold = float(self.get_parameter("hold").value)
         repeat = self.get_parameter("repeat").value
 
         GPIO.setmode(GPIO.BCM)
