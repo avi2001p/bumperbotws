@@ -133,6 +133,11 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("max_valid_range", 4.0)
         self.declare_parameter("min_cone_points", 3)
         self.declare_parameter("scan_timeout", 0.5)
+        # How long a cone may stay empty before the robot HALTS. A single dropped
+        # scan (or a cone that momentarily returns too few rays) must NOT slam the
+        # brakes — at 0.18 m/s the robot travels ~9 cm in 0.5 s, so briefly
+        # coasting on the last good reading is far safer than lurching stop-go.
+        self.declare_parameter("lidar_grace", 0.5)
 
         # --- Safety ---
         self.declare_parameter("use_lidar_safety", True)
@@ -186,6 +191,7 @@ class WallFollowCoverageNode(Node):
         self.max_valid_range = self.get_parameter("max_valid_range").value
         self.min_cone_points = self.get_parameter("min_cone_points").value
         self.scan_timeout = self.get_parameter("scan_timeout").value
+        self.lidar_grace = self.get_parameter("lidar_grace").value
 
         self.use_lidar = self.get_parameter("use_lidar_safety").value
         self.safety_distance = self.get_parameter("safety_distance").value
@@ -249,6 +255,8 @@ class WallFollowCoverageNode(Node):
         self.d_back_side = None
         self.scan_stamp = self.get_clock().now()
         self.obstacle_detected = False
+        self.cone_stats = {}      # cone name -> (rays in cone, rays that passed the filter)
+        self.scan_points = 0
 
         # --- State / lap tracking ---
         self.state = IDLE
@@ -261,6 +269,13 @@ class WallFollowCoverageNode(Node):
         self.v_cmd = self.v_max
         self.pause_start = None
         self.lap_start = None
+
+        # --- Lidar dropout ride-through ---
+        # Last usable side/front pair, and when the current dropout began. Lets a
+        # brief gap coast instead of halting (see lidar_grace).
+        self.last_side = None
+        self.last_front = None
+        self.miss_start = None
 
         # --- Rectangle corner pivot ---
         # Angle still owed on the current corner. Kept across a water/obstacle
@@ -286,22 +301,35 @@ class WallFollowCoverageNode(Node):
     #  LIDAR
     # ===================================================================
 
-    def cone_distance(self, msg, bearing, half_angle):
+    def cone_distance(self, msg, bearing, half_angle, name=None):
         """Conservative (20th-percentile) distance in a robot-frame cone.
         Lidar is yaw=pi mounted -> robot bearing b = normalize(scan_angle - pi).
-        Returns None if too few valid rays."""
+        Returns None if too few valid rays.
+
+        Also records, per cone, how many rays FELL IN the cone vs how many of
+        those were VALID — the two numbers that tell you whether an empty cone
+        means "lidar is not seeing that direction" or "everything there was
+        filtered out as too near/far".
+        """
         vals = []
+        in_cone = 0
         angle_min = msg.angle_min
         inc = msg.angle_increment
         for idx, r in enumerate(msg.ranges):
+            a = normalize_angle(angle_min + idx * inc)
+            b = normalize_angle(a - math.pi)
+            if abs(normalize_angle(b - bearing)) > half_angle:
+                continue
+            in_cone += 1
             if math.isinf(r) or math.isnan(r):
                 continue
             if r < self.min_valid_range or r > self.max_valid_range:
                 continue
-            a = normalize_angle(angle_min + idx * inc)
-            b = normalize_angle(a - math.pi)
-            if abs(normalize_angle(b - bearing)) <= half_angle:
-                vals.append(r)
+            vals.append(r)
+
+        if name is not None:
+            self.cone_stats[name] = (in_cone, len(vals))
+
         if len(vals) < self.min_cone_points:
             return None
         vals.sort()
@@ -310,11 +338,26 @@ class WallFollowCoverageNode(Node):
 
     def scan_callback(self, msg):
         # Distances in the four robot-frame cones (S flips left/right)
-        self.d_front = self.cone_distance(msg, 0.0, self.front_cone)
-        self.d_side = self.cone_distance(msg, self.S * math.pi / 2.0, self.side_cone)
-        self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone)
-        self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone)
+        self.d_front = self.cone_distance(msg, 0.0, self.front_cone, "front")
+        self.d_side = self.cone_distance(msg, self.S * math.pi / 2.0, self.side_cone, "side")
+        self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone, "fwd")
+        self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone, "back")
         self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
+
+        # Cone health. "in" = rays pointing into the cone, "ok" = those that
+        # survived the near/far/inf filter. in=0 means the lidar is not scanning
+        # that bearing at all (mount/angle problem); in>0 with ok=0 means every
+        # ray there was inf or out of range (nothing to see, or occluded).
+        self.scan_points = len(msg.ranges)
+        if any(v is None for v in (self.d_front, self.d_side)):
+            stats = " ".join(
+                f"{k}:in={i},ok={o}" for k, (i, o) in self.cone_stats.items()
+            )
+            self.get_logger().warn(
+                f"EMPTY CONE (need >= {self.min_cone_points} valid rays) | "
+                f"scan has {self.scan_points} rays | {stats}",
+                throttle_duration_sec=1.0,
+            )
 
         # --- Head-on e-stop (close + narrow; reused convention) ---
         if not self.use_lidar:
@@ -498,15 +541,42 @@ class WallFollowCoverageNode(Node):
             return
 
         # ------------------------------ FOLLOWING ------------------------------
-        # FAIL-SAFE: never wall-follow blind
+        # FAIL-SAFE: never wall-follow blind — but ride out BRIEF dropouts.
+        # Halting on a single missing scan makes the robot lurch stop-go, which is
+        # both useless and harder on the drivetrain than coasting 9 cm on a reading
+        # that is 0.5 s old. Only a SUSTAINED loss means we are truly blind.
         if d_side is None or d_front is None:
-            self.state = LIDAR_LOST
-            self.stop_robot()
-            self.get_logger().warn(
-                "Lidar side/front reading lost — halting (no blind driving).",
-                throttle_duration_sec=2.0,
-            )
-            return
+            now = self.now_sec()
+            if self.miss_start is None:
+                self.miss_start = now
+            missing_for = now - self.miss_start
+
+            if (missing_for < self.lidar_grace
+                    and self.last_side is not None
+                    and self.last_front is not None):
+                self.get_logger().warn(
+                    f"Lidar gap ({'side' if d_side is None else ''}"
+                    f"{'+' if d_side is None and d_front is None else ''}"
+                    f"{'front' if d_front is None else ''}) "
+                    f"{missing_for:.2f}s — coasting on last reading.",
+                    throttle_duration_sec=1.0,
+                )
+                d_side = self.last_side
+                d_front = self.last_front
+            else:
+                self.state = LIDAR_LOST
+                self.stop_robot()
+                self.get_logger().warn(
+                    f"Lidar side/front lost for {missing_for:.2f}s "
+                    f"(side={'--' if d_side is None else 'ok'}, "
+                    f"front={'--' if d_front is None else 'ok'}) — halting.",
+                    throttle_duration_sec=2.0,
+                )
+                return
+        else:
+            self.miss_start = None
+            self.last_side = d_side
+            self.last_front = d_front
 
         # --- RECTANGLE: square corner ahead -> pivot, don't steer ---
         # The side wall holds a CONSTANT distance into a square corner, so e_dist
