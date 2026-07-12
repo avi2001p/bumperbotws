@@ -11,10 +11,23 @@ Starts the core hardware nodes for the Raspberry Pi direct-control pipeline:
 """
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+from bumperbot_hardware.parameters import KFF, INTEGRAL_WINDUP_LIMIT
 
 
 def generate_launch_description():
+
+    # Feed-forward gain — the knob for a TORQUE shortfall. The default was
+    # calibrated on smooth tile; a rougher floor needs more PWM for the same
+    # speed, so raise this if the robot strains but will not move.
+    #   ros2 launch bumperbot_hardware hardware.launch.py kff:=0.55
+    kff_arg = DeclareLaunchArgument("kff", default_value=str(KFF))
+    i_limit_arg = DeclareLaunchArgument(
+        "integral_limit", default_value=str(INTEGRAL_WINDUP_LIMIT)
+    )
 
     # --- Static TF: base_link -> laser (values from URDF) ---
     # URDF laser_joint: xyz="-0.0050526 -0.0023221 0.1208" rpy="0 0 3.14"
@@ -48,9 +61,11 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "kp": 0.0,
-            "ki": 0.5,   # slow integral balances the wheels; INTEGRAL_WINDUP_LIMIT
-                          # (parameters.py) caps it so it can't overshoot into a left turn
+            "ki": 0.5,   # slow integral balances the wheels; integral_limit caps it
+                          # so it can't overshoot into a left turn
             "kd": 0.0,
+            "kff": LaunchConfiguration("kff"),
+            "integral_limit": LaunchConfiguration("integral_limit"),
         }],
     )
 
@@ -69,6 +84,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        kff_arg,
+        i_limit_arg,
         base_to_laser_tf,
         encoder_reader,
         pid_controller,

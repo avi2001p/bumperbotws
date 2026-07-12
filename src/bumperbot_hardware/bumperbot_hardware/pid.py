@@ -37,10 +37,33 @@ class PIDController(Node):
         self.declare_parameter("kp", KP)
         self.declare_parameter("ki", KI)
         self.declare_parameter("kd", KD)
+        # Feed-forward gain and integral ceiling. Tunable at RUNTIME because they
+        # are surface-dependent: a rougher floor (or a heavier robot) needs more
+        # PWM for the same speed, and the defaults were calibrated on smooth tile.
+        #
+        # KFF is the SAFE knob for a torque shortfall — it scales both wheels
+        # equally, so it adds push without biasing the straight-line balance.
+        # INTEGRAL_LIMIT is NOT purely a torque knob: it is also what trims the
+        # straight-line drift (see parameters.py), so raising it can make the
+        # robot curve. Reach for kff first.
+        self.declare_parameter("kff", KFF)
+        self.declare_parameter("integral_limit", INTEGRAL_WINDUP_LIMIT)
 
         self.kp = self.get_parameter("kp").get_parameter_value().double_value
         self.ki = self.get_parameter("ki").get_parameter_value().double_value
         self.kd = self.get_parameter("kd").get_parameter_value().double_value
+        self.kff = self.get_parameter("kff").get_parameter_value().double_value
+        self.integral_limit = (
+            self.get_parameter("integral_limit").get_parameter_value().double_value
+        )
+
+        ticks_at_max = (MAX_LINEAR_SPEED / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV
+        self.get_logger().info(
+            f"PID gains: kp={self.kp} ki={self.ki} kd={self.kd} "
+            f"kff={self.kff} integral_limit={self.integral_limit} | "
+            f"stalled-wheel ceiling at 0.15 m/s = "
+            f"{min(255.0, self.kff * (0.15 / WHEEL_CIRCUMFERENCE) * TICKS_PER_REV + self.ki * self.integral_limit):.0f}/255"
+        )
 
         # --- State variables ---
         # Desired robot velocity
@@ -149,20 +172,22 @@ class PIDController(Node):
         kp = self.get_parameter("kp").get_parameter_value().double_value
         ki = self.get_parameter("ki").get_parameter_value().double_value
         kd = self.get_parameter("kd").get_parameter_value().double_value
+        kff = self.get_parameter("kff").get_parameter_value().double_value
+        i_limit = self.get_parameter("integral_limit").get_parameter_value().double_value
 
         error = target - actual
 
         # Feed-forward: baseline PWM proportional to the target speed so both
         # wheels move together immediately and the PID only trims the error.
         # ff_trim balances a stronger/weaker motor so equal command = equal speed.
-        ff_term = KFF * target * ff_trim
+        ff_term = kff * target * ff_trim
 
         # Proportional
         p_term = kp * error
 
         # Integral with anti-windup
         integral += error * self.dt
-        integral = max(-INTEGRAL_WINDUP_LIMIT, min(INTEGRAL_WINDUP_LIMIT, integral))
+        integral = max(-i_limit, min(i_limit, integral))
         i_term = ki * integral
 
         # Derivative on MEASUREMENT (not error) — avoids the spike when the
@@ -271,12 +296,31 @@ class PIDController(Node):
         elif self.left_speed == 0.0 and self.right_speed == 0.0:
             hint = "  [actual=0 → no /wheel_speed feedback (check encoders)]"
         else:
-            hint = ""
+            # STALL: commanded, and the output is pinned near its ceiling, but
+            # the wheel is barely turning -> the surface is loading the motor
+            # past the available PWM. Raise kff.
+            def stalled(target, actual, out):
+                return (abs(target) > 1.0
+                        and abs(actual) < 0.35 * abs(target)
+                        and abs(out) > 0.90 * PID_OUTPUT_MAX)
+
+            l_stall = stalled(self.target_left_speed, self.left_speed, self.left_output)
+            r_stall = stalled(self.target_right_speed, self.right_speed, self.right_output)
+            if l_stall or r_stall:
+                which = "L+R" if (l_stall and r_stall) else ("L" if l_stall else "R")
+                hint = f"  [STALL {which}: output maxed but wheel slow → raise kff]"
+            else:
+                hint = ""
+
+        l_duty = abs(self.left_output) / PID_OUTPUT_MAX * 100.0
+        r_duty = abs(self.right_output) / PID_OUTPUT_MAX * 100.0
 
         self.get_logger().info(
             f"PID | "
-            f"L: tgt={self.target_left_speed:+7.1f} act={self.left_speed:+7.1f} out={self.left_output:+7.1f} | "
-            f"R: tgt={self.target_right_speed:+7.1f} act={self.right_speed:+7.1f} out={self.right_output:+7.1f}"
+            f"L: tgt={self.target_left_speed:+7.1f} act={self.left_speed:+7.1f} "
+            f"out={self.left_output:+7.1f} ({l_duty:3.0f}%) | "
+            f"R: tgt={self.target_right_speed:+7.1f} act={self.right_speed:+7.1f} "
+            f"out={self.right_output:+7.1f} ({r_duty:3.0f}%)"
             f"{hint}"
         )
 
