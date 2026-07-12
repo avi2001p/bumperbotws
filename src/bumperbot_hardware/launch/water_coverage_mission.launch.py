@@ -10,14 +10,15 @@ Starts everything:
   4. wall_follow_coverage   — lidar wall-following spiral coverage
   5. water_actuator         — 2 water sensors -> pause + vacuum + fan -> resume
 
-Flow: coverage drives the spiral; when a water sensor trips, water_actuator
-publishes /water_cleaning_active, coverage pauses (PAUSED_WATER), vacuum+fan run
-for fan_duration, then coverage resumes.
+Flow: coverage drives the spiral; when a water sensor trips, water_clean publishes
+/water_cleaning_active, coverage pauses (PAUSED_WATER) for 5 s with the vacuum+fan
+on, then coverage RESUMES while they keep running for another 5 s (10 s total).
 
 Usage:
+  # viva arena (curved ends)
   ros2 launch bumperbot_hardware water_coverage_mission.launch.py
-  ros2 launch bumperbot_hardware water_coverage_mission.launch.py use_map:=false
-  ros2 launch bumperbot_hardware water_coverage_mission.launch.py relay_active_high:=true
+  # real-ground test arena (square corners)
+  ros2 launch bumperbot_hardware water_coverage_mission.launch.py arena_shape:=rectangle use_map:=false
 
 RViz (laptop): rviz2, Fixed Frame = map -> shows the saved map + robot covering it.
 """
@@ -35,7 +36,9 @@ def generate_launch_description():
 
     use_map_arg = DeclareLaunchArgument("use_map", default_value="true")
     relay_arg = DeclareLaunchArgument("relay_active_high", default_value="false")
-    fan_duration_arg = DeclareLaunchArgument("fan_duration", default_value="5.0")
+    # "stadium" = the viva arena (curved ends). "rectangle" = the real-ground
+    # test arena (square corners — needs the explicit corner pivot).
+    shape_arg = DeclareLaunchArgument("arena_shape", default_value="stadium")
 
     hardware_launch = IncludeLaunchDescription(
         os.path.join(
@@ -71,6 +74,9 @@ def generate_launch_description():
         name="wall_follow_coverage",
         output="screen",
         # Tuned defaults live in the node; auto_start begins on first lidar data.
+        parameters=[{
+            "arena_shape": LaunchConfiguration("arena_shape"),
+        }],
     )
 
     # Simple water logic: EITHER sensor wet -> vacuum + fan ON (+ pause coverage);
@@ -88,7 +94,7 @@ def generate_launch_description():
     return LaunchDescription([
         use_map_arg,
         relay_arg,
-        fan_duration_arg,
+        shape_arg,
         hardware_launch,
         rplidar_launch,
         localization_launch,

@@ -2,27 +2,40 @@
 """
 wall_follow_coverage.py
 -----------------------
-Lidar wall-following coverage for the stadium arena.
+Lidar wall-following coverage. Handles TWO arena shapes:
+
+  arena_shape:=stadium    straights + curved end caps (the viva arena)
+  arena_shape:=rectangle  four straight walls + square corners
 
 The robot keeps the boundary wall on ONE side (default RIGHT) at a FIXED lidar
-distance and follows it all the way around — straights AND the curved ends — so
-it holds a constant gap from the border everywhere. After each full lap it steps
-one lane inward, tracing concentric ovals that spiral to the centre.
+distance and follows it all the way around. After each full lap it steps one lane
+inward, spiralling to the centre.
+
+The two shapes need different behaviour at the ends:
+
+  STADIUM   — the wall curves away gradually, so the side-distance error grows on
+              its own and the PD follower tracks it. A curve feed-forward rounds
+              the cap at the known semicircle radius.
+  RECTANGLE — the side wall stays at a CONSTANT distance right up to the corner,
+              so the side-distance error never grows and the PD alone commands NO
+              turn: the robot would drive straight into the end wall. A square
+              corner therefore needs an EXPLICIT turn — when the front wall closes
+              in, stop and pivot 90 deg away from the followed wall, then hand back
+              to the follower.
 
 It drives on the lidar relative to the wall (NO map / global localization), which
-suits the symmetric arena. Odometry HEADING is used only to count laps.
+suits the symmetric arena. Odometry HEADING is used only to count laps and to
+measure the corner pivot.
 
 Subscribes:  /scan, /odom, /water_cleaning_active
 Publishes:   /cmd_vel
 
 Run:
-  ros2 run bumperbot_coverage wall_follow_coverage
-  ros2 run bumperbot_coverage wall_follow_coverage --ros-args -p target_offset:=0.15 -p linear_speed_max:=0.10
+  ros2 run bumperbot_coverage wall_follow_coverage --ros-args -p arena_shape:=rectangle
+  ros2 run bumperbot_coverage wall_follow_coverage --ros-args -p arena_shape:=stadium
 
 SAFETY: start slow, hand near the power. The DISTANCE term always steers AWAY
 from a wall it gets too close to, so the worst case is wobble, not a collision.
-Set `-p curve_ff_enable:=false` to disable the curve feed-forward and rely on the
-(self-stabilising) PD wall-follower alone.
 """
 
 import math
@@ -38,6 +51,7 @@ from std_msgs.msg import Bool
 from bumperbot_hardware.parameters import (
     ROBOT_WIDTH,
     ROBOT_LENGTH,
+    GROUND_WIDTH,
     GROUND_SEMICIRCLE_RADIUS,
     COVERAGE_OVERLAP,
     MAX_HEADING_CORRECTION,
@@ -50,6 +64,7 @@ from bumperbot_hardware.parameters import (
 # --- States ---
 IDLE = "IDLE"
 FOLLOWING = "FOLLOWING"
+CORNER_TURN = "CORNER_TURN"      # rectangle only: pivoting 90 deg at a corner
 PAUSED_OBSTACLE = "PAUSED_OBSTACLE"
 PAUSED_WATER = "PAUSED_WATER"
 LIDAR_LOST = "LIDAR_LOST"
@@ -130,6 +145,17 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("auto_start", True)
         self.declare_parameter("pose_source", "odom")
 
+        # --- Arena shape ---
+        # "stadium"   -> curved end caps, 2 per lap, curve feed-forward rounds them
+        # "rectangle" -> square corners, 4 per lap, explicit 90 deg pivot at each
+        self.declare_parameter("arena_shape", "stadium")
+        # Short side of the arena — half of it is how far inward the spiral can go.
+        self.declare_parameter("arena_short_side", GROUND_WIDTH)   # 1.2 m
+        # Rectangle corner behaviour
+        self.declare_parameter("corner_turn_speed", 0.8)      # rad/s pivot rate
+        self.declare_parameter("corner_angle_deg", 90.0)      # square corner
+        self.declare_parameter("corner_clearance", 0.03)      # gap kept while pivoting
+
         # --- Read params ---
         side = self.get_parameter("follow_side").value
         self.S = -1.0 if side == "right" else 1.0
@@ -169,14 +195,36 @@ class WallFollowCoverageNode(Node):
         self.auto_start = self.get_parameter("auto_start").value
         self.pose_source = self.get_parameter("pose_source").value
 
+        shape = str(self.get_parameter("arena_shape").value).lower()
+        if shape not in ("stadium", "rectangle"):
+            raise ValueError(
+                f"arena_shape must be 'stadium' or 'rectangle', got '{shape}'"
+            )
+        self.is_rect = (shape == "rectangle")
+        self.short_side = self.get_parameter("arena_short_side").value
+        self.corner_turn_speed = self.get_parameter("corner_turn_speed").value
+        self.corner_angle = math.radians(self.get_parameter("corner_angle_deg").value)
+        self.corner_clearance = self.get_parameter("corner_clearance").value
+
+        # A square corner needs 4 turns per lap; a stadium has 2 end caps.
+        self.ends_per_lap = 4 if self.is_rect else 2
+        # The curve feed-forward is tuned to the semicircle — meaningless on a
+        # rectangle, where the explicit pivot does the turning instead.
+        if self.is_rect:
+            self.curve_ff_enable = False
+
         # Spiral schedule
         self.target_offset = ROBOT_WIDTH / 2.0 + self.wall_clearance   # lane 0 (~0.16 m)
         self.lane_step = ROBOT_WIDTH - self.overlap                    # ~0.20 m
-        self.max_offset = GROUND_SEMICIRCLE_RADIUS - self.inner_margin  # ~0.56 m
+        self.max_offset = self.short_side / 2.0 - self.inner_margin    # ~0.56 m
 
         # Allow target_offset override (after computing the default)
         self.declare_parameter("target_offset", self.target_offset)
         self.target_offset = self.get_parameter("target_offset").value
+
+        # Radius swept by the chassis corners when the robot spins on the spot —
+        # the limit on how close to a wall a corner pivot can safely start.
+        self.half_diag = math.hypot(ROBOT_WIDTH / 2.0, ROBOT_LENGTH / 2.0)  # ~0.14 m
 
         # Floor: the lidar is at the robot CENTRE, so center-to-wall must stay
         # above the body half-width or the robot scrapes the wall.
@@ -213,6 +261,13 @@ class WallFollowCoverageNode(Node):
         self.v_cmd = self.v_max
         self.pause_start = None
         self.lap_start = None
+
+        # --- Rectangle corner pivot ---
+        # Angle still owed on the current corner. Kept across a water/obstacle
+        # pause so an interrupted pivot RESUMES rather than restarting (restarting
+        # would over-rotate by however much it had already turned).
+        self.corner_remaining = 0.0
+        self.resume_to_corner = False
 
         # --- ROS wiring ---
         self.cmd_vel_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
@@ -315,8 +370,35 @@ class WallFollowCoverageNode(Node):
         self.lap_yaw = 0.0
         self.end_caps_seen = 0
         self._was_on_curve = False
+        self.corner_remaining = 0.0
+        self.resume_to_corner = False
         self.prev_theta = self.theta
         self.lap_start = self.now_sec()
+
+    @property
+    def corner_trigger(self):
+        """Front-wall distance at which a square-corner pivot begins.
+
+        Pivoting 90 deg about the robot centre turns the wall that was in FRONT
+        into the wall on the SIDE, at the same distance — so the natural trigger
+        is target_offset. It is floored by the chassis half-diagonal plus a
+        clearance, because the corners of the body sweep that radius while it
+        spins: trigger any closer and it clips the wall mid-pivot.
+        """
+        return max(self.target_offset, self.half_diag + self.corner_clearance)
+
+    def resume_state(self):
+        """Where to go after a pause — back into an interrupted corner pivot if
+        there was one, otherwise straight back to following."""
+        return CORNER_TURN if self.resume_to_corner else FOLLOWING
+
+    def check_lap_complete(self):
+        """A lap = every end/corner seen AND ~2pi of accumulated heading."""
+        if (self.end_caps_seen >= self.ends_per_lap
+                and abs(self.lap_yaw) >= 2.0 * math.pi - 0.30):
+            self.step_inward()
+            return True
+        return False
 
     def control_loop(self):
         if not self.odom_received:
@@ -327,12 +409,23 @@ class WallFollowCoverageNode(Node):
         d_fwd = self.fresh(self.d_fwd_side)
         d_back = self.fresh(self.d_back_side)
 
+        # Wrap-safe heading delta since the last cycle. Computed every cycle so
+        # prev_theta never goes stale, but only ADDED to the lap total in the
+        # driving states below — a pause must not inject phantom rotation.
+        dtheta = 0.0
+        if self.prev_theta is not None:
+            dtheta = normalize_angle(self.theta - self.prev_theta)
+        self.prev_theta = self.theta
+
         # --- IDLE -> FOLLOWING ---
         if self.state == IDLE:
             if self.auto_start and d_side is not None:
                 self.state = FOLLOWING
                 self.arm_lap()
-                self.get_logger().info("=== WALL-FOLLOW COVERAGE STARTED ===")
+                self.get_logger().info(
+                    f"=== WALL-FOLLOW COVERAGE STARTED "
+                    f"({'RECTANGLE' if self.is_rect else 'STADIUM'}) ==="
+                )
             return
 
         if self.state == COMPLETE:
@@ -342,7 +435,7 @@ class WallFollowCoverageNode(Node):
         if self.state == PAUSED_WATER:
             self.stop_robot()
             if not self.water_cleaning_active:
-                self.state = FOLLOWING
+                self.state = self.resume_state()
             return
 
         if self.state == PAUSED_OBSTACLE:
@@ -350,24 +443,23 @@ class WallFollowCoverageNode(Node):
             # Auto-resume when clear, OR after a timeout (static arena: the
             # "obstacle" is a permanent wall the follower will handle).
             if not self.obstacle_detected:
-                self.state = FOLLOWING
+                self.state = self.resume_state()
             elif (self.now_sec() - self.pause_start) > self.obstacle_resume_sec:
                 self.get_logger().warn("Obstacle pause timed out — resuming (static wall).")
-                self.state = FOLLOWING
+                self.state = self.resume_state()
             return
 
         if self.state == LIDAR_LOST:
             self.stop_robot()
             if d_side is not None and d_front is not None:
-                self.state = FOLLOWING
+                self.state = self.resume_state()
                 self.get_logger().info("Lidar reading back — resuming.")
             return
 
-        # --- FOLLOWING ---
-        # Accumulate lap heading ONLY while actively following (signed, wrap-safe)
-        if self.prev_theta is not None:
-            self.lap_yaw += normalize_angle(self.theta - self.prev_theta)
-        self.prev_theta = self.theta
+        # ---------------- driving states: FOLLOWING and CORNER_TURN -------------
+        # The corner pivot is a real part of the lap's 2pi, so the total accrues
+        # here rather than in FOLLOWING alone.
+        self.lap_yaw += dtheta
 
         if self.obstacle_detected:
             self.state = PAUSED_OBSTACLE
@@ -379,6 +471,33 @@ class WallFollowCoverageNode(Node):
             self.stop_robot()
             return
 
+        # --- CORNER_TURN: pivot in place until the 90 deg is spent ---
+        # Spending down a remaining angle (rather than comparing against a start
+        # heading) is what lets a pause interrupt the pivot and resume it mid-way.
+        if self.state == CORNER_TURN:
+            self.corner_remaining -= abs(dtheta)
+            if self.corner_remaining <= 0.0:
+                self.end_caps_seen += 1
+                self.resume_to_corner = False
+                self.state = FOLLOWING
+                self.get_logger().info(
+                    f"Corner {self.end_caps_seen}/{self.ends_per_lap} turned — following again."
+                )
+                self.check_lap_complete()
+                return
+
+            tw = Twist()
+            tw.linear.x = 0.0
+            # Turn AWAY from the followed wall: right wall (S=-1) -> +z (CCW/left)
+            tw.angular.z = -self.S * self.corner_turn_speed
+            self.cmd_vel_pub.publish(tw)
+            self.get_logger().info(
+                f"[CORNER_TURN] {math.degrees(self.corner_remaining):.0f} deg to go",
+                throttle_duration_sec=0.5,
+            )
+            return
+
+        # ------------------------------ FOLLOWING ------------------------------
         # FAIL-SAFE: never wall-follow blind
         if d_side is None or d_front is None:
             self.state = LIDAR_LOST
@@ -389,9 +508,25 @@ class WallFollowCoverageNode(Node):
             )
             return
 
-        # Are we rounding an end cap? (front wall close)
+        # --- RECTANGLE: square corner ahead -> pivot, don't steer ---
+        # The side wall holds a CONSTANT distance into a square corner, so e_dist
+        # stays ~0 and the PD below would command no turn at all. The front cone
+        # is the only thing that sees the corner coming.
+        if self.is_rect and d_front <= self.corner_trigger:
+            self.corner_remaining = self.corner_angle
+            self.resume_to_corner = True
+            self.state = CORNER_TURN
+            self.stop_robot()
+            self.get_logger().info(
+                f"Corner ahead: front wall at {d_front:.2f} m — pivoting "
+                f"{math.degrees(self.corner_angle):.0f} deg "
+                f"{'LEFT' if self.S < 0 else 'RIGHT'}."
+            )
+            return
+
+        # Are we rounding a stadium end cap? (front wall close)
         front_anticipate = self.target_offset + ROBOT_LENGTH / 2.0 + self.curve_margin
-        on_curve = d_front < front_anticipate
+        on_curve = (not self.is_rect) and d_front < front_anticipate
 
         # On the curve, follow at a LARGER gap so the swinging wheels clear the
         # curved border (and the arc is a bit tighter / smaller diameter).
@@ -412,7 +547,8 @@ class WallFollowCoverageNode(Node):
             path_radius = max(GROUND_SEMICIRCLE_RADIUS - eff_offset, self.r_min)
             kappa_ff = self.v_cmd / path_radius
             steer += -self.S * kappa_ff     # right wall (S=-1) -> +kappa = LEFT/CCW
-        # End-cap rising-edge counter for lap detection
+        # End-cap rising-edge counter for lap detection (stadium; the rectangle
+        # counts its corners as it finishes each pivot instead)
         if on_curve and not self._was_on_curve:
             self.end_caps_seen += 1
         self._was_on_curve = on_curve
@@ -436,19 +572,19 @@ class WallFollowCoverageNode(Node):
         self.get_logger().info(
             f"[{self.state}] lap{self.lap_count} off={self.target_offset:.2f} "
             f"side={d_side:.2f} e={e_dist:+.2f} front={d_front:.2f} "
-            f"steer={steer:+.2f} v={v:.2f} caps={self.end_caps_seen} "
+            f"steer={steer:+.2f} v={v:.2f} "
+            f"ends={self.end_caps_seen}/{self.ends_per_lap} "
             f"yaw={math.degrees(self.lap_yaw):+.0f}",
             throttle_duration_sec=0.5,
         )
 
-        # --- Lap complete? (heading ~2pi AND both caps seen) OR watchdog ---
-        lap_done = (self.end_caps_seen >= 2
-                    and abs(self.lap_yaw) >= 2.0 * math.pi - 0.30)
+        # --- Lap complete? OR watchdog ---
         lap_timed_out = (self.lap_start is not None
                          and (self.now_sec() - self.lap_start) > self.lap_timeout_sec)
+        if self.check_lap_complete():
+            return
         if lap_timed_out:
             self.get_logger().warn("Lap watchdog timeout — stepping inward.")
-        if lap_done or lap_timed_out:
             self.step_inward()
 
     def step_inward(self):
