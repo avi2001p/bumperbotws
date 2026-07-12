@@ -37,6 +37,7 @@ setup(
             'water_clean = bumperbot_hardware.water_clean:main',
             'water_test = bumperbot_hardware.water_test:main',
             'servo_test = bumperbot_hardware.servo_test:main',
+            'roller_calibrate = bumperbot_hardware.roller_calibrate:main',
             'calibrate_encoders = bumperbot_hardware.calibrate_encoders:main',
             'diagnose_slam = bumperbot_hardware.diagnose_slam:main',
         ],
