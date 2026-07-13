@@ -327,7 +327,7 @@ class WallFollowCoverageNode(Node):
     #  LIDAR
     # ===================================================================
 
-    def cone_distance(self, msg, bearing, half_angle, name=None):
+    def cone_distance(self, msg, bearing, half_angle, name=None, inf_is_open=False):
         """Conservative (20th-percentile) distance in a robot-frame cone.
         Lidar is yaw=pi mounted -> robot bearing b = normalize(scan_angle - pi).
         Returns None if too few valid rays.
@@ -365,6 +365,17 @@ class WallFollowCoverageNode(Node):
             self.cone_stats[name] = (in_cone, len(vals), n_inf, n_near, n_far)
 
         if len(vals) < self.min_cone_points:
+            # No usable return. For the FRONT cone that is not blindness — it means
+            # the beam went out and hit nothing, i.e. OPEN FLOOR ahead (an open end
+            # of the arena, or a wall too far / too oblique to echo). Reporting it
+            # as "clear at max range" is both true and safe: no corner is triggered,
+            # and a wall that really is approaching WILL start returning rays long
+            # before the robot reaches it.
+            #
+            # The SIDE cone gets no such treatment: no return there means there is
+            # no wall to follow, and driving on would be genuinely blind.
+            if inf_is_open and n_inf >= self.min_cone_points:
+                return self.max_valid_range
             return None
         vals.sort()
         i = max(0, int(0.2 * len(vals)) - 1)
@@ -372,7 +383,9 @@ class WallFollowCoverageNode(Node):
 
     def scan_callback(self, msg):
         # Distances in the four robot-frame cones (S flips left/right)
-        self.d_front = self.cone_distance(msg, 0.0, self.front_cone, "front")
+        self.d_front = self.cone_distance(
+            msg, 0.0, self.front_cone, "front", inf_is_open=True
+        )
         self.d_side = self.cone_distance(msg, self.S * math.pi / 2.0, self.side_cone, "side")
         self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone, "fwd")
         self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone, "back")
