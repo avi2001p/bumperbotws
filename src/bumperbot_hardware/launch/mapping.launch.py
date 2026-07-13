@@ -23,8 +23,9 @@ Usage:
 import os
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -34,11 +35,17 @@ def generate_launch_description():
     lidar_dir = get_package_share_directory("rplidar_ros")
     slam_dir = get_package_share_directory("bumperbot_mapping")
 
+    # Mapping is done by TELEOP, so the robot must actually move — on rough
+    # ground that needs the higher feed-forward, same as the mission.
+    #   ros2 launch bumperbot_hardware mapping.launch.py kff:=0.78
+    kff_arg = DeclareLaunchArgument("kff", default_value="0.38")
+
     # Core driving pipeline + odometry + base_link->laser TF
     hardware = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(hw_dir, "launch", "hardware.launch.py")
-        )
+        ),
+        launch_arguments={"kff": LaunchConfiguration("kff")}.items(),
     )
 
     # RPLidar C1 -> /scan (frame_id 'laser', 460800 baud by default)
@@ -56,6 +63,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        kff_arg,
         hardware,
         lidar,
         slam,

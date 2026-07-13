@@ -219,10 +219,24 @@ class WallFollowCoverageNode(Node):
         if self.is_rect:
             self.curve_ff_enable = False
 
-        # Spiral schedule
+        # --- Spiral schedule ---
         self.target_offset = ROBOT_WIDTH / 2.0 + self.wall_clearance   # lane 0 (~0.16 m)
-        self.lane_step = ROBOT_WIDTH - self.overlap                    # ~0.20 m
         self.max_offset = self.short_side / 2.0 - self.inner_margin    # ~0.56 m
+
+        # How far inward each completed lap steps.
+        #
+        # Stepping a FULL robot width leaves nothing to spare: any wall-following
+        # error, wheel slip, or lane-to-lane drift opens a real strip of floor
+        # that the extraction head never passes over, and on the outward lap that
+        # missed strip is invisible — the robot cannot tell it was skipped.
+        #
+        # Stepping HALF a robot width makes consecutive lanes overlap by 50%, so a
+        # strip missed on one lap is swept on the next. It costs roughly twice the
+        # laps, and buys coverage that does not depend on tracking being perfect.
+        default_step = (ROBOT_WIDTH / 2.0 if self.is_rect
+                        else ROBOT_WIDTH - self.overlap)
+        self.declare_parameter("lane_step", default_step)
+        self.lane_step = self.get_parameter("lane_step").value
 
         # Allow target_offset override (after computing the default)
         self.declare_parameter("target_offset", self.target_offset)
@@ -291,10 +305,22 @@ class WallFollowCoverageNode(Node):
         self.create_subscription(LaserScan, "scan", self.scan_callback, 10)
         self.timer = self.create_timer(0.05, self.control_loop)   # 20 Hz
 
+        lanes = []
+        off = self.target_offset
+        while off <= self.max_offset and len(lanes) < self.max_laps:
+            lanes.append(off)
+            off += self.lane_step
+        overlap_pct = max(0.0, (1.0 - self.lane_step / ROBOT_WIDTH)) * 100.0
+
         self.get_logger().info(
-            f"Wall-follow coverage: follow={side} offset0={self.target_offset:.2f}m "
-            f"lane_step={self.lane_step:.2f}m max_offset={self.max_offset:.2f}m "
+            f"Wall-follow coverage: shape={shape} follow={side} "
             f"v={self.v_max:.2f} K_DIST={self.k_dist} K_ANGLE={self.k_angle}"
+        )
+        self.get_logger().info(
+            f"Lane plan: {len(lanes)} laps at offsets "
+            f"[{', '.join(f'{o:.2f}' for o in lanes)}] m — "
+            f"step={self.lane_step:.2f} m on a {ROBOT_WIDTH:.2f} m body "
+            f"= {overlap_pct:.0f}% lane overlap (max_offset={self.max_offset:.2f} m)"
         )
 
     # ===================================================================
@@ -313,6 +339,9 @@ class WallFollowCoverageNode(Node):
         """
         vals = []
         in_cone = 0
+        n_inf = 0        # no return at all
+        n_near = 0       # something CLOSER than min_valid_range (or r=0 "invalid")
+        n_far = 0        # beyond max_valid_range
         angle_min = msg.angle_min
         inc = msg.angle_increment
         for idx, r in enumerate(msg.ranges):
@@ -322,13 +351,18 @@ class WallFollowCoverageNode(Node):
                 continue
             in_cone += 1
             if math.isinf(r) or math.isnan(r):
+                n_inf += 1
                 continue
-            if r < self.min_valid_range or r > self.max_valid_range:
+            if r < self.min_valid_range:
+                n_near += 1
+                continue
+            if r > self.max_valid_range:
+                n_far += 1
                 continue
             vals.append(r)
 
         if name is not None:
-            self.cone_stats[name] = (in_cone, len(vals))
+            self.cone_stats[name] = (in_cone, len(vals), n_inf, n_near, n_far)
 
         if len(vals) < self.min_cone_points:
             return None
@@ -344,18 +378,23 @@ class WallFollowCoverageNode(Node):
         self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone, "back")
         self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
 
-        # Cone health. "in" = rays pointing into the cone, "ok" = those that
-        # survived the near/far/inf filter. in=0 means the lidar is not scanning
-        # that bearing at all (mount/angle problem); in>0 with ok=0 means every
-        # ray there was inf or out of range (nothing to see, or occluded).
+        # Cone health, with the REASON each ray was rejected — the three reasons
+        # mean completely different faults:
+        #   inf  -> no return: the beam hits nothing (or a surface it cannot see)
+        #   near -> a return CLOSER than min_valid_range: something is physically
+        #           in the beam path (an occluding part of the robot itself), or
+        #           the driver is reporting r=0 for an invalid measurement
+        #   far  -> beyond max_valid_range
         self.scan_points = len(msg.ranges)
         if any(v is None for v in (self.d_front, self.d_side)):
             stats = " ".join(
-                f"{k}:in={i},ok={o}" for k, (i, o) in self.cone_stats.items()
+                f"{k}:in={i},ok={o}(inf={inf},near={nr},far={fr})"
+                for k, (i, o, inf, nr, fr) in self.cone_stats.items()
             )
             self.get_logger().warn(
-                f"EMPTY CONE (need >= {self.min_cone_points} valid rays) | "
-                f"scan has {self.scan_points} rays | {stats}",
+                f"EMPTY CONE (need >= {self.min_cone_points} valid rays, "
+                f"range window {self.min_valid_range:.2f}-{self.max_valid_range:.1f} m) | "
+                f"scan {self.scan_points} rays | {stats}",
                 throttle_duration_sec=1.0,
             )
 
