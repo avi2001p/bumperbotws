@@ -51,6 +51,7 @@ from std_msgs.msg import Bool
 from bumperbot_hardware.parameters import (
     ROBOT_WIDTH,
     ROBOT_LENGTH,
+    MOTOR_AXLE_FROM_FRONT,
     GROUND_WIDTH,
     GROUND_SEMICIRCLE_RADIUS,
     COVERAGE_OVERLAP,
@@ -242,9 +243,19 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("target_offset", self.target_offset)
         self.target_offset = self.get_parameter("target_offset").value
 
-        # Radius swept by the chassis corners when the robot spins on the spot —
-        # the limit on how close to a wall a corner pivot can safely start.
-        self.half_diag = math.hypot(ROBOT_WIDTH / 2.0, ROBOT_LENGTH / 2.0)  # ~0.14 m
+        # Radius swept by the chassis corners when the robot spins on the spot.
+        #
+        # A differential drive rotates about the midpoint of its DRIVEN AXLE, not
+        # about its geometric centre. This robot's axle sits MOTOR_AXLE_FROM_FRONT
+        # (7 cm) behind the nose, i.e. well FORWARD of centre — so the long end is
+        # the TAIL, and the tail corners are what swing widest. Measuring the sweep
+        # from the geometric centre under-reports it by ~1.7 cm, which is enough to
+        # clip a wall the robot "should" have cleared.
+        axle_to_front = MOTOR_AXLE_FROM_FRONT                       # 0.070 m
+        axle_to_rear = ROBOT_LENGTH - MOTOR_AXLE_FROM_FRONT         # 0.117 m
+        self.pivot_radius = math.hypot(
+            max(axle_to_front, axle_to_rear), ROBOT_WIDTH / 2.0
+        )                                                            # ~0.161 m
 
         # Floor: the lidar is at the robot CENTRE, so center-to-wall must stay
         # above the body half-width or the robot scrapes the wall.
@@ -322,6 +333,22 @@ class WallFollowCoverageNode(Node):
             f"step={self.lane_step:.2f} m on a {ROBOT_WIDTH:.2f} m body "
             f"= {overlap_pct:.0f}% lane overlap (max_offset={self.max_offset:.2f} m)"
         )
+
+        if self.is_rect:
+            pivot_gap = self.target_offset - self.pivot_radius
+            self.get_logger().info(
+                f"Pivot radius {self.pivot_radius:.3f} m (axle to tail corners) — "
+                f"at offset {self.target_offset:.2f} m the body clears the wall by "
+                f"{pivot_gap * 100:.1f} cm while turning a corner."
+            )
+            if pivot_gap < self.corner_clearance:
+                self.get_logger().warn(
+                    f"target_offset {self.target_offset:.2f} m is TOO CLOSE to pivot "
+                    f"safely: the tail sweeps {self.pivot_radius:.3f} m, leaving only "
+                    f"{pivot_gap * 100:.1f} cm. It WILL clip the wall on a corner. "
+                    f"Use target_offset >= "
+                    f"{self.pivot_radius + self.corner_clearance:.2f} m."
+                )
 
     # ===================================================================
     #  LIDAR
@@ -474,13 +501,13 @@ class WallFollowCoverageNode(Node):
     def corner_trigger(self):
         """Front-wall distance at which a square-corner pivot begins.
 
-        Pivoting 90 deg about the robot centre turns the wall that was in FRONT
-        into the wall on the SIDE, at the same distance — so the natural trigger
-        is target_offset. It is floored by the chassis half-diagonal plus a
-        clearance, because the corners of the body sweep that radius while it
-        spins: trigger any closer and it clips the wall mid-pivot.
+        Pivoting 90 deg turns the wall that was in FRONT into the wall on the SIDE,
+        at the same distance — so the natural trigger is target_offset. It is
+        floored by the PIVOT RADIUS (axle to the tail corners) plus a clearance,
+        because that is the circle the body actually sweeps while it spins: trigger
+        any closer and it clips the wall mid-pivot.
         """
-        return max(self.target_offset, self.half_diag + self.corner_clearance)
+        return max(self.target_offset, self.pivot_radius + self.corner_clearance)
 
     def resume_state(self):
         """Where to go after a pause — back into an interrupted corner pivot if
