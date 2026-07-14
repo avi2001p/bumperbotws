@@ -139,6 +139,16 @@ class WallFollowCoverageNode(Node):
         # brakes — at 0.18 m/s the robot travels ~9 cm in 0.5 s, so briefly
         # coasting on the last good reading is far safer than lurching stop-go.
         self.declare_parameter("lidar_grace", 0.5)
+        # What to do when the FRONT cone returns no echo at all.
+        #
+        # false (default, SAFE): treat it as "I am blind" and HALT. If a border is
+        #   invisible to the lidar (too low, too dark, too oblique) this is the only
+        #   thing standing between the robot and that wall.
+        # true: treat it as "open floor ahead" (report max range). ONLY set this
+        #   when you have CONFIRMED the arena genuinely has an open end — otherwise
+        #   the robot will drive into any wall it cannot see, because no corner will
+        #   ever trigger.
+        self.declare_parameter("front_inf_is_open", False)
 
         # --- Safety ---
         self.declare_parameter("use_lidar_safety", True)
@@ -199,6 +209,7 @@ class WallFollowCoverageNode(Node):
         self.min_cone_points = self.get_parameter("min_cone_points").value
         self.scan_timeout = self.get_parameter("scan_timeout").value
         self.lidar_grace = self.get_parameter("lidar_grace").value
+        self.front_inf_is_open = self.get_parameter("front_inf_is_open").value
 
         self.use_lidar = self.get_parameter("use_lidar_safety").value
         self.safety_distance = self.get_parameter("safety_distance").value
@@ -412,7 +423,7 @@ class WallFollowCoverageNode(Node):
     def scan_callback(self, msg):
         # Distances in the four robot-frame cones (S flips left/right)
         self.d_front = self.cone_distance(
-            msg, 0.0, self.front_cone, "front", inf_is_open=True
+            msg, 0.0, self.front_cone, "front", inf_is_open=self.front_inf_is_open
         )
         self.d_side = self.cone_distance(msg, self.S * math.pi / 2.0, self.side_cone, "side")
         self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone, "fwd")
