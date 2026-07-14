@@ -83,6 +83,12 @@ class WaterClean(Node):
         # the probe unseen. At 0.12 m/s, 5 Hz leaves a 24 mm blind gap; 20 Hz cuts
         # it to 6 mm. Polling faster is far cheaper than driving slower.
         self.declare_parameter("poll_rate", 20.0)   # Hz
+        # Consecutive WET reads required to confirm a detection. Rejects the brief
+        # electrical glitch that motor/relay switching couples onto the sensor pin,
+        # which otherwise fires a false trigger during driving. At 50 Hz, 3 reads
+        # = 60 ms — far shorter than any real puddle contact, so real water still
+        # trips it immediately.
+        self.declare_parameter("debounce", 3)
 
         # --- Roller ---
         # Lowered onto the floor for the MOVING phase, so it sweeps water toward
@@ -102,6 +108,7 @@ class WaterClean(Node):
         self.move_duration = self.get_parameter("move_duration").value
         self.cooldown = self.get_parameter("cooldown").value
         self.poll_rate = max(1.0, self.get_parameter("poll_rate").value)
+        self.debounce = max(1, int(self.get_parameter("debounce").value))
         self.use_roller = self.get_parameter("use_roller").value
         self.roller_up = self.get_parameter("roller_up_angle").value
         self.roller_down = self.get_parameter("roller_down_angle").value
@@ -113,8 +120,12 @@ class WaterClean(Node):
         GPIO.setwarnings(False)
         GPIO.setup(VACUUM_PUMP_PIN, GPIO.OUT, initial=self.off)
         GPIO.setup(DC_FAN_PIN, GPIO.OUT, initial=self.off)
-        GPIO.setup(WATER_SENSOR_PIN_1, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.setup(WATER_SENSOR_PIN_2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        # PULL-UP, not pull-down. The sensors read LOW when wet, so a floating pin
+        # (a loose or unplugged probe) must default HIGH = DRY. With a pull-DOWN a
+        # disconnected sensor reads LOW = permanently WET — which turns the vacuum
+        # and fan on at startup and never lets them stop.
+        GPIO.setup(WATER_SENSOR_PIN_1, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(WATER_SENSOR_PIN_2, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
         # --- Roller servo (optional; degrades gracefully) ---
         self.pi = None
@@ -148,7 +159,29 @@ class WaterClean(Node):
         # MONITORING -> CLEAN_STOPPED -> CLEAN_MOVING -> COOLDOWN -> MONITORING
         self.state = "MONITORING"
         self.t_mark = 0.0
+
+        # Edge-triggered detection state.
+        #   wet_count : consecutive confirmed-wet reads (for the debounce)
+        #   rearmed   : may a NEW detection fire? Set True only after a DRY read,
+        #               cleared on each trigger. Starts FALSE so a probe that is
+        #               already wet at boot (residual water) cannot trigger until
+        #               it has been seen dry once — this is what stops the vacuum
+        #               running the moment the node starts, and what stops it
+        #               re-triggering forever on a probe that stays wet after use.
+        self.wet_count = 0
+        self.rearmed = False
+
         self.timer = self.create_timer(1.0 / self.poll_rate, self.loop)
+
+        # Show the raw sensor states at startup so a stuck-wet probe is visible
+        # immediately instead of being blamed on the logic.
+        s1 = "WET" if (self.use_sensor1 and self.sensor_wet(WATER_SENSOR_PIN_1)) else "dry"
+        s2 = "WET" if (self.use_sensor2 and self.sensor_wet(WATER_SENSOR_PIN_2)) else "dry"
+        self.get_logger().info(
+            f"Sensor states at startup: sensor1={s1}, sensor2={s2}. "
+            f"(A sensor reading WET now with no water on it is loose/miswired — "
+            f"the vacuum will NOT run until it reads dry once.)"
+        )
 
         self.get_logger().info(
             f"Water clean started: EITHER enabled sensor WET -> vacuum+fan ON. "
@@ -212,8 +245,19 @@ class WaterClean(Node):
     def loop(self):
         now = self.now_sec()
 
+        # --- Debounced, edge-triggered detection ---
+        # Update every cycle regardless of state so re-arming keeps working.
+        if self.water_detected():
+            self.wet_count += 1
+        else:
+            self.wet_count = 0
+            self.rearmed = True      # a confirmed DRY read re-arms the trigger
+        confirmed_wet = self.wet_count >= self.debounce
+
         if self.state == "MONITORING":
-            if self.water_detected():
+            # Fire only on a fresh dry->wet edge: confirmed wet AND re-armed.
+            if confirmed_wet and self.rearmed:
+                self.rearmed = False
                 # Phase 1: STOP the robot, vacuum + fan ON
                 GPIO.output(VACUUM_PUMP_PIN, self.on)
                 GPIO.output(DC_FAN_PIN, self.on)
