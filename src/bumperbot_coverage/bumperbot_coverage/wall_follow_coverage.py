@@ -177,12 +177,6 @@ class WallFollowCoverageNode(Node):
         # than drive the whole lap further out, it widens only for this last
         # stretch and tucks back in after the turn.
         self.declare_parameter("corner_approach", 0.55)       # m
-        # Backstop for corner detection. The narrow front cone can MISS a wall if
-        # the robot arrives at the corner slightly yawed, or the wall is oblique —
-        # and a missed corner means driving straight into it. This second, WIDE arc
-        # takes the closest valid ray anywhere ahead, and triggers the pivot on its
-        # own. Belt and braces: either detector firing is enough to turn.
-        self.declare_parameter("front_wide_deg", 30.0)
 
         # --- Read params ---
         side = self.get_parameter("follow_side").value
@@ -236,7 +230,6 @@ class WallFollowCoverageNode(Node):
         self.corner_angle = math.radians(self.get_parameter("corner_angle_deg").value)
         self.corner_clearance = self.get_parameter("corner_clearance").value
         self.corner_approach = self.get_parameter("corner_approach").value
-        self.front_wide = math.radians(self.get_parameter("front_wide_deg").value)
 
         # A square corner needs 4 turns per lap; a stadium has 2 end caps.
         self.ends_per_lap = 4 if self.is_rect else 2
@@ -300,7 +293,6 @@ class WallFollowCoverageNode(Node):
 
         # --- Lidar readings ---
         self.d_front = None
-        self.d_front_wide = None
         self.d_side = None
         self.d_fwd_side = None
         self.d_back_side = None
@@ -437,22 +429,6 @@ class WallFollowCoverageNode(Node):
         self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone, "fwd")
         self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone, "back")
         self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
-
-        # CLOSEST valid ray anywhere in a wide forward arc. Unlike the narrow cone
-        # above this takes the minimum, not a percentile, and needs only ONE good
-        # ray — so a wall the narrow cone misses (robot yawed, wall oblique) still
-        # shows up here in time to turn.
-        self.d_front_wide = None
-        for idx, r in enumerate(msg.ranges):
-            if math.isinf(r) or math.isnan(r):
-                continue
-            if r < self.min_valid_range or r > self.max_valid_range:
-                continue
-            a = normalize_angle(msg.angle_min + idx * msg.angle_increment)
-            b = normalize_angle(a - math.pi)          # robot-forward = scan +/- pi
-            if abs(b) <= self.front_wide:
-                if self.d_front_wide is None or r < self.d_front_wide:
-                    self.d_front_wide = r
 
         # Cone health, with the REASON each ray was rejected — the three reasons
         # mean completely different faults:
@@ -711,18 +687,13 @@ class WallFollowCoverageNode(Node):
         #   * the narrow cone (steady, percentile-filtered)
         #   * the wide arc (closest ray anywhere ahead; catches a wall the narrow
         #     cone misses because the robot is yawed or the wall is oblique)
-        wide = self.fresh(self.d_front_wide)
-        by_cone = d_front <= self.corner_trigger
-        by_wide = wide is not None and wide <= self.corner_trigger
-        if self.is_rect and (by_cone or by_wide):
-            seen = d_front if by_cone else wide
-            how = "cone" if by_cone else "WIDE ARC (narrow cone missed it)"
+        if self.is_rect and d_front <= self.corner_trigger:
             self.corner_remaining = self.corner_angle
             self.resume_to_corner = True
             self.state = CORNER_TURN
             self.stop_robot()
             self.get_logger().info(
-                f"Corner ahead: wall at {seen:.2f} m via {how} — pivoting "
+                f"Corner ahead: front wall at {d_front:.2f} m — pivoting "
                 f"{math.degrees(self.corner_angle):.0f} deg "
                 f"{'LEFT' if self.S < 0 else 'RIGHT'}."
             )
@@ -742,10 +713,7 @@ class WallFollowCoverageNode(Node):
         # but arriving at a corner that close means the tail clips the side wall no
         # matter how early the turn is triggered. So widen for the last stretch
         # only; the follower tucks back in to the lane offset after the turn.
-        near_corner = d_front < self.corner_approach or (
-            wide is not None and wide < self.corner_approach
-        )
-        if self.is_rect and near_corner:
+        if self.is_rect and d_front < self.corner_approach:
             eff_offset = max(eff_offset, self.pivot_offset)
 
         # --- Steering: PD on side distance + parallel/damping term ---
