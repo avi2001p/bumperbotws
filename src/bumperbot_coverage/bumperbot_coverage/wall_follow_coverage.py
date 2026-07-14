@@ -526,10 +526,14 @@ class WallFollowCoverageNode(Node):
         """Front-wall distance at which the pivot begins.
 
         A 90 deg pivot turns the wall that was in FRONT into the wall on the SIDE,
-        at the same distance — so stopping at pivot_offset leaves the robot able to
-        spin clear of BOTH the front wall and the side wall it was following.
+        at the same distance — so the natural trigger is the lane offset: stop that
+        far from the front wall, and after the turn the robot is already at its
+        following distance from it.
+
+        Floored by pivot_offset, because below that the tail clips the wall while
+        spinning no matter how neatly the geometry works out.
         """
-        return self.pivot_offset
+        return max(self.target_offset, self.pivot_offset)
 
     def resume_state(self):
         """Where to go after a pause — back into an interrupted corner pivot if
