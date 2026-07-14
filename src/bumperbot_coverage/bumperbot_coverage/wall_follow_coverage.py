@@ -161,6 +161,12 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("corner_turn_speed", 0.8)      # rad/s pivot rate
         self.declare_parameter("corner_angle_deg", 90.0)      # square corner
         self.declare_parameter("corner_clearance", 0.03)      # gap kept while pivoting
+        # How far ahead of a corner the robot starts easing AWAY from the side
+        # wall. At the corner it must clear BOTH walls with its swinging tail, and
+        # the tight lane-following offset is not enough room to spin in. Rather
+        # than drive the whole lap further out, it widens only for this last
+        # stretch and tucks back in after the turn.
+        self.declare_parameter("corner_approach", 0.55)       # m
 
         # --- Read params ---
         side = self.get_parameter("follow_side").value
@@ -212,6 +218,7 @@ class WallFollowCoverageNode(Node):
         self.corner_turn_speed = self.get_parameter("corner_turn_speed").value
         self.corner_angle = math.radians(self.get_parameter("corner_angle_deg").value)
         self.corner_clearance = self.get_parameter("corner_clearance").value
+        self.corner_approach = self.get_parameter("corner_approach").value
 
         # A square corner needs 4 turns per lap; a stadium has 2 end caps.
         self.ends_per_lap = 4 if self.is_rect else 2
@@ -335,20 +342,14 @@ class WallFollowCoverageNode(Node):
         )
 
         if self.is_rect:
-            pivot_gap = self.target_offset - self.pivot_radius
             self.get_logger().info(
-                f"Pivot radius {self.pivot_radius:.3f} m (axle to tail corners) — "
-                f"at offset {self.target_offset:.2f} m the body clears the wall by "
-                f"{pivot_gap * 100:.1f} cm while turning a corner."
+                f"Corners: tail sweeps {self.pivot_radius:.3f} m about the axle, so "
+                f"the robot eases out from {self.target_offset:.2f} m to "
+                f"{self.pivot_offset:.2f} m over the last "
+                f"{self.corner_approach:.2f} m before each corner "
+                f"({self.corner_clearance * 100:.0f} cm tail clearance), then tucks "
+                f"back in."
             )
-            if pivot_gap < self.corner_clearance:
-                self.get_logger().warn(
-                    f"target_offset {self.target_offset:.2f} m is TOO CLOSE to pivot "
-                    f"safely: the tail sweeps {self.pivot_radius:.3f} m, leaving only "
-                    f"{pivot_gap * 100:.1f} cm. It WILL clip the wall on a corner. "
-                    f"Use target_offset >= "
-                    f"{self.pivot_radius + self.corner_clearance:.2f} m."
-                )
 
     # ===================================================================
     #  LIDAR
@@ -498,16 +499,26 @@ class WallFollowCoverageNode(Node):
         self.lap_start = self.now_sec()
 
     @property
-    def corner_trigger(self):
-        """Front-wall distance at which a square-corner pivot begins.
+    def pivot_offset(self):
+        """Distance the robot must keep from a wall to SPIN beside it safely.
 
-        Pivoting 90 deg turns the wall that was in FRONT into the wall on the SIDE,
-        at the same distance — so the natural trigger is target_offset. It is
-        floored by the PIVOT RADIUS (axle to the tail corners) plus a clearance,
-        because that is the circle the body actually sweeps while it spins: trigger
-        any closer and it clips the wall mid-pivot.
+        Its tail sweeps `pivot_radius` about the axle, so anything closer than
+        that plus a clearance gets clipped. This is the binding constraint at a
+        corner and it is usually LARGER than the lane-following offset — which is
+        why the robot eases out on the approach instead of following this far out
+        for the whole lap.
         """
-        return max(self.target_offset, self.pivot_radius + self.corner_clearance)
+        return self.pivot_radius + self.corner_clearance
+
+    @property
+    def corner_trigger(self):
+        """Front-wall distance at which the pivot begins.
+
+        A 90 deg pivot turns the wall that was in FRONT into the wall on the SIDE,
+        at the same distance — so stopping at pivot_offset leaves the robot able to
+        spin clear of BOTH the front wall and the side wall it was following.
+        """
+        return self.pivot_offset
 
     def resume_state(self):
         """Where to go after a pause — back into an interrupted corner pivot if
@@ -680,6 +691,15 @@ class WallFollowCoverageNode(Node):
         # On the curve, follow at a LARGER gap so the swinging wheels clear the
         # curved border (and the arc is a bit tighter / smaller diameter).
         eff_offset = self.target_offset + (self.curve_extra_offset if on_curve else 0.0)
+
+        # RECTANGLE corner approach: ease AWAY from the side wall so there is room
+        # for the tail to swing when the pivot starts. The lane offset is tuned for
+        # tight coverage, not for spinning — following that close all lap is fine,
+        # but arriving at a corner that close means the tail clips the side wall no
+        # matter how early the turn is triggered. So widen for the last stretch
+        # only; the follower tucks back in to the lane offset after the turn.
+        if self.is_rect and d_front < self.corner_approach:
+            eff_offset = max(eff_offset, self.pivot_offset)
 
         # --- Steering: PD on side distance + parallel/damping term ---
         e_dist = d_side - eff_offset                  # + => too far from wall
