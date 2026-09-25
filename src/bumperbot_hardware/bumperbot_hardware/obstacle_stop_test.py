@@ -48,6 +48,9 @@ from bumperbot_hardware.parameters import (
     ODOM_TOPIC,
     MAX_LINEAR_SPEED,
     KP_HEADING,
+    KI_HEADING,
+    HEADING_INTEGRAL_LIMIT,
+    HEADING_DEADBAND,
     MAX_HEADING_CORRECTION,
     WATER_CLEANING_TOPIC,
 )
@@ -105,6 +108,8 @@ class ObstacleStopTest(Node):
         self.stopped = False        # obstacle hysteresis latch
         self.finished = False       # reached target distance
         self.water_active = False   # water_clean is running its stop phase
+        self.heading_integral = 0.0 # nulls steady drift from motor imbalance
+        self.dt = 0.05
 
         self.cmd_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
         self.create_subscription(Odometry, ODOM_TOPIC, self.odom_cb, 10)
@@ -200,12 +205,23 @@ class ObstacleStopTest(Node):
             )
             return
 
-        # Drive forward, holding the starting heading.
+        # Drive forward, holding the starting heading with a PI controller.
+        # P alone leaves a STEADY veer when one motor is slightly stronger — it
+        # needs a residual error to push against that bias, and the faster the
+        # robot goes the more ground that residual angle covers (why it drifts
+        # left only at speed). The integral accumulates the residual and cancels
+        # it, so the robot holds a true straight line at any speed.
         err = normalize_angle(self.theta - self.start_theta)
+        if abs(err) < HEADING_DEADBAND:
+            err = 0.0
+        self.heading_integral += err * self.dt
+        self.heading_integral = max(-HEADING_INTEGRAL_LIMIT,
+                                    min(HEADING_INTEGRAL_LIMIT, self.heading_integral))
+        correction = -(self.heading_gain * err + KI_HEADING * self.heading_integral)
         tw = Twist()
         tw.linear.x = self.speed
         tw.angular.z = max(-MAX_HEADING_CORRECTION,
-                           min(MAX_HEADING_CORRECTION, -self.heading_gain * err))
+                           min(MAX_HEADING_CORRECTION, correction))
         self.cmd_pub.publish(tw)
         shown = f"{front:.2f} m" if front is not None else "clear"
         self.get_logger().info(
