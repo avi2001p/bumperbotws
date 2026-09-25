@@ -263,6 +263,19 @@ class WallFollowCoverageNode(Node):
         if self.is_rect:
             self.curve_ff_enable = False
 
+        # Stop-and-wait obstacle detection is RELIABLE ONLY ON THE RECTANGLE.
+        # On the stadium a curved end reads "interior open" just like a discrete
+        # object, so it false-stops at the curves — verified on hardware. Force it
+        # OFF for the stadium regardless of the flag, so the prototype/viva run is
+        # never affected by it.
+        if self.obstacle_stop_enable and not self.is_rect:
+            self.obstacle_stop_enable = False
+            self.get_logger().warn(
+                "obstacle_stop_enable ignored on the STADIUM shape — it false-stops "
+                "at the curved ends. Obstacle stop-and-wait is used only on the "
+                "rectangle grounds."
+            )
+
         # --- Spiral schedule ---
         self.target_offset = ROBOT_WIDTH / 2.0 + self.wall_clearance   # lane 0 (~0.16 m)
         self.max_offset = self.short_side / 2.0 - self.inner_margin    # ~0.56 m
