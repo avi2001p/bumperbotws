@@ -158,6 +158,26 @@ class WallFollowCoverageNode(Node):
         self.declare_parameter("obstacle_resume_sec", 1.5)  # recover fast if it does pause
         self.declare_parameter("lap_timeout_sec", 90.0)     # per-lap watchdog
 
+        # --- Stop-and-wait obstacle handling (opt-in; default OFF) ---
+        # When ON, a discrete object ahead makes the robot STOP and WAIT until it
+        # is removed, then continue. It does NOT drive into it and does NOT go
+        # around.
+        #
+        # Telling an obstacle from the boundary the robot is meant to turn at:
+        # a boundary wall at a rectangle corner spans the full width, so the
+        # front diagonal on the INTERIOR side (away from the followed wall) is
+        # also blocked; a discrete object leaves the interior open.
+        #   front close + interior OPEN   -> obstacle -> STOP and wait
+        #   front close + interior BLOCKED-> boundary  -> corner/curve handles it
+        # NOTE: on the STADIUM a curved end can read interior-open, so a rare
+        # false stop is possible there — obstacle_wait_timeout is the safety net
+        # that resumes and lets the curve logic take over rather than freezing.
+        self.declare_parameter("obstacle_stop_enable", False)
+        self.declare_parameter("obstacle_stop_distance", 0.30)   # start stopping here
+        self.declare_parameter("obstacle_clear_distance", 0.40)  # clear past here to go
+        self.declare_parameter("obstacle_interior_open", 0.50)   # interior >= this = "open"
+        self.declare_parameter("obstacle_wait_timeout", 20.0)    # safety net (s), 0 = wait forever
+
         self.declare_parameter("auto_start", True)
         self.declare_parameter("pose_source", "odom")
 
@@ -215,6 +235,11 @@ class WallFollowCoverageNode(Node):
         self.safety_distance = self.get_parameter("safety_distance").value
         self.safety_cone = math.radians(self.get_parameter("safety_cone_deg").value)
         self.obstacle_resume_sec = self.get_parameter("obstacle_resume_sec").value
+        self.obstacle_stop_enable = self.get_parameter("obstacle_stop_enable").value
+        self.obstacle_stop_distance = self.get_parameter("obstacle_stop_distance").value
+        self.obstacle_clear_distance = self.get_parameter("obstacle_clear_distance").value
+        self.obstacle_interior_open = self.get_parameter("obstacle_interior_open").value
+        self.obstacle_wait_timeout = self.get_parameter("obstacle_wait_timeout").value
         self.lap_timeout_sec = self.get_parameter("lap_timeout_sec").value
         self.auto_start = self.get_parameter("auto_start").value
         self.pose_source = self.get_parameter("pose_source").value
@@ -296,8 +321,10 @@ class WallFollowCoverageNode(Node):
         self.d_side = None
         self.d_fwd_side = None
         self.d_back_side = None
+        self.d_fwd_open = None
         self.scan_stamp = self.get_clock().now()
         self.obstacle_detected = False
+        self._obstacle_latched = False    # hysteresis for the stop-and-wait detector
         self.cone_stats = {}      # cone name -> (rays in cone, rays that passed the filter)
         self.scan_points = 0
 
@@ -360,6 +387,14 @@ class WallFollowCoverageNode(Node):
                 f"{self.corner_approach:.2f} m before each corner "
                 f"({self.corner_clearance * 100:.0f} cm tail clearance), then tucks "
                 f"back in."
+            )
+
+        if self.obstacle_stop_enable:
+            self.get_logger().info(
+                f"Obstacle stop-and-wait ON: stops at {self.obstacle_stop_distance:.2f} m, "
+                f"resumes when clear past {self.obstacle_clear_distance:.2f} m "
+                f"(safety timeout {self.obstacle_wait_timeout:.0f}s). "
+                f"Full-width walls are treated as corners, not obstacles."
             )
 
     # ===================================================================
@@ -428,6 +463,9 @@ class WallFollowCoverageNode(Node):
         self.d_side = self.cone_distance(msg, self.S * math.pi / 2.0, self.side_cone, "side")
         self.d_fwd_side = self.cone_distance(msg, self.S * math.pi / 4.0, self.diag_cone, "fwd")
         self.d_back_side = self.cone_distance(msg, self.S * 3.0 * math.pi / 4.0, self.diag_cone, "back")
+        # Front diagonal on the INTERIOR side (away from the followed wall) — used
+        # only to tell a discrete obstacle from the full-width boundary wall.
+        self.d_fwd_open = self.cone_distance(msg, -self.S * math.pi / 4.0, self.diag_cone)
         self.scan_stamp = rclpy.time.Time.from_msg(msg.header.stamp)
 
         # Cone health, with the REASON each ray was rejected — the three reasons
@@ -450,20 +488,57 @@ class WallFollowCoverageNode(Node):
                 throttle_duration_sec=1.0,
             )
 
-        # --- Head-on e-stop (close + narrow; reused convention) ---
         if not self.use_lidar:
             self.obstacle_detected = False
             return
-        found = False
-        for idx, r in enumerate(msg.ranges):
-            if math.isinf(r) or math.isnan(r) or r < self.min_valid_range:
-                continue
-            angle = normalize_angle(msg.angle_min + idx * msg.angle_increment)
-            angle_from_front = math.pi - abs(angle)   # robot-forward = lidar +/-pi
-            if angle_from_front < self.safety_cone and r < self.safety_distance:
-                found = True
-                break
-        self.obstacle_detected = found
+
+        if self.obstacle_stop_enable:
+            self.obstacle_detected = self.detect_obstacle()
+        else:
+            # --- Legacy head-on e-stop (very close + narrow) ---
+            found = False
+            for idx, r in enumerate(msg.ranges):
+                if math.isinf(r) or math.isnan(r) or r < self.min_valid_range:
+                    continue
+                angle = normalize_angle(msg.angle_min + idx * msg.angle_increment)
+                angle_from_front = math.pi - abs(angle)   # robot-forward = lidar +/-pi
+                if angle_from_front < self.safety_cone and r < self.safety_distance:
+                    found = True
+                    break
+            self.obstacle_detected = found
+
+    def detect_obstacle(self):
+        """Stop-and-wait detector: True when a discrete object (NOT the boundary
+        wall) is close ahead.
+
+        Hysteresis: once stopped, stays stopped until the front is clear past
+        obstacle_clear_distance, so a robot idling at the threshold does not
+        flicker go/stop.
+
+        Wall vs obstacle: a boundary wall at a corner spans the full width, so the
+        INTERIOR-side front diagonal is also blocked; an obstacle leaves it open.
+        Only an open interior counts as an obstacle, so a full-width wall is left
+        for the corner/curve logic and the robot does not freeze at a corner.
+        """
+        front = self.d_front
+        if front is None:
+            self._obstacle_latched = False
+            return False
+
+        thresh = (self.obstacle_clear_distance if self._obstacle_latched
+                  else self.obstacle_stop_distance)
+        if front > thresh:
+            self._obstacle_latched = False
+            return False
+
+        interior = self.d_fwd_open
+        interior_open = (interior is None) or (interior > self.obstacle_interior_open)
+        if not interior_open:
+            self._obstacle_latched = False    # full-width wall -> not an obstacle
+            return False
+
+        self._obstacle_latched = True
+        return True
 
     def fresh(self, value):
         """value if the last scan is recent enough, else None (fail-safe)."""
@@ -588,11 +663,32 @@ class WallFollowCoverageNode(Node):
 
         if self.state == PAUSED_OBSTACLE:
             self.stop_robot()
-            # Auto-resume when clear, OR after a timeout (static arena: the
-            # "obstacle" is a permanent wall the follower will handle).
+            waited = self.now_sec() - self.pause_start
             if not self.obstacle_detected:
+                # Path cleared — the obstacle was removed.
+                self.get_logger().info(
+                    f"Obstacle cleared after {waited:.0f}s — resuming coverage."
+                )
                 self.state = self.resume_state()
-            elif (self.now_sec() - self.pause_start) > self.obstacle_resume_sec:
+            elif self.obstacle_stop_enable:
+                # Stop-and-WAIT: hold until the object is removed. The timeout is
+                # only a SAFETY NET so a misread (e.g. a curved end read as an
+                # obstacle) cannot freeze the robot forever — on resume, a real
+                # obstacle is simply re-detected and re-stops.
+                if self.obstacle_wait_timeout > 0.0 and waited > self.obstacle_wait_timeout:
+                    self.get_logger().warn(
+                        f"Obstacle still present after {waited:.0f}s (safety timeout) — "
+                        f"nudging; a real obstacle will stop the robot again."
+                    )
+                    self.state = self.resume_state()
+                else:
+                    self.get_logger().info(
+                        "OBSTACLE ahead — STOPPED, waiting for it to be removed.",
+                        throttle_duration_sec=2.0,
+                    )
+            elif waited > self.obstacle_resume_sec:
+                # LEGACY e-stop mode: the "obstacle" is likely a static wall the
+                # follower should handle, so time out quickly and resume.
                 self.get_logger().warn("Obstacle pause timed out — resuming (static wall).")
                 self.state = self.resume_state()
             return
