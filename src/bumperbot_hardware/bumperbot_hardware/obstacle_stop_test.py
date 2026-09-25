@@ -2,12 +2,17 @@
 """
 obstacle_stop_test.py
 ---------------------
-Standalone STRAIGHT-LINE obstacle-stop test. The robot drives forward holding its
-heading for a set distance (default 3 m), and STOPS when something appears ahead —
-then RESUMES when the path clears. It also stops on its own once the distance is
-reached. No wall-following, no coverage: it tests only "drive straight and stop at
-an obstacle", so you can validate the obstacle behaviour on its own before running
-it inside the coverage mission.
+Standalone STRAIGHT-LINE demo / test. The robot drives forward holding its heading
+for a set distance (default 2 m) and demonstrates, in one run, every subsystem:
+
+  * OBSTACLE stop-and-wait — stops when something appears ahead, resumes when it
+    is removed.
+  * WATER detection + extraction — when water_clean (run alongside) trips on a
+    water sensor, it publishes /water_cleaning_active; this node PAUSES the robot
+    for the stop phase, then drives on while the vacuum + fan + roller finish.
+
+No wall-following, no coverage — just a clean straight line, so a viva panel can
+see the sensing, stopping, and extraction working without the full arena.
 
 This deliberately does NOT do the obstacle-vs-wall discrimination that the
 coverage node does (there are no walls in a straight-line test — anything ahead is
@@ -36,6 +41,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
+from std_msgs.msg import Bool
 
 from bumperbot_hardware.parameters import (
     CMD_VEL_TOPIC,
@@ -43,6 +49,7 @@ from bumperbot_hardware.parameters import (
     MAX_LINEAR_SPEED,
     KP_HEADING,
     MAX_HEADING_CORRECTION,
+    WATER_CLEANING_TOPIC,
 )
 
 
@@ -65,7 +72,7 @@ class ObstacleStopTest(Node):
     def __init__(self):
         super().__init__("obstacle_stop_test")
 
-        self.declare_parameter("distance", 3.0)           # metres to travel then stop
+        self.declare_parameter("distance", 2.0)           # metres to travel then stop
         self.declare_parameter("speed", 0.15)             # m/s forward
         self.declare_parameter("stop_distance", 0.30)     # stop when front <= this
         self.declare_parameter("clear_distance", 0.40)    # resume when front > this
@@ -97,17 +104,25 @@ class ObstacleStopTest(Node):
         self.scan_stamp = self.get_clock().now()
         self.stopped = False        # obstacle hysteresis latch
         self.finished = False       # reached target distance
+        self.water_active = False   # water_clean is running its stop phase
 
         self.cmd_pub = self.create_publisher(Twist, CMD_VEL_TOPIC, 10)
         self.create_subscription(Odometry, ODOM_TOPIC, self.odom_cb, 10)
         self.create_subscription(LaserScan, "scan", self.scan_cb, 10)
+        # water_clean publishes True while the robot should hold for the stop
+        # phase of extraction, False to drive on while the vacuum + fan finish.
+        self.create_subscription(Bool, WATER_CLEANING_TOPIC, self.water_cb, 10)
         self.timer = self.create_timer(0.05, self.loop)   # 20 Hz
 
         self.get_logger().info(
-            f"Obstacle-stop straight-line test: drive {self.target_distance:.1f} m at "
-            f"{self.speed:.2f} m/s, STOP at any obstacle within {self.stop_distance:.2f} m "
-            f"(resume past {self.clear_distance:.2f} m). Waiting for /odom and /scan..."
+            f"Straight-line demo: drive {self.target_distance:.1f} m at "
+            f"{self.speed:.2f} m/s | STOP at any obstacle within {self.stop_distance:.2f} m "
+            f"(resume past {self.clear_distance:.2f} m) | PAUSE while water is being extracted. "
+            f"Waiting for /odom and /scan..."
         )
+
+    def water_cb(self, msg):
+        self.water_active = msg.data
 
     def odom_cb(self, msg):
         self.theta = yaw_from_quaternion(msg.pose.pose.orientation)
@@ -157,6 +172,16 @@ class ObstacleStopTest(Node):
             self.cmd_pub.publish(Twist())
             self.get_logger().warn("No fresh /scan — stopping (lidar lost).",
                                    throttle_duration_sec=2.0)
+            return
+
+        # WATER: hold still while water_clean is in its stop phase. It clears the
+        # flag when the robot should drive on (vacuum + fan + roller keep going).
+        if self.water_active:
+            self.cmd_pub.publish(Twist())
+            self.get_logger().info(
+                "WATER DETECTED — PAUSED while vacuum + fan extract.",
+                throttle_duration_sec=1.0,
+            )
             return
 
         front = self.d_front
