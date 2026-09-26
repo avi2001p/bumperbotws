@@ -101,6 +101,12 @@ class WaterClean(Node):
         # up angle. Climb this far past it, then settle back — the roller returns
         # to its exact park position instead of drooping a few degrees low.
         self.declare_parameter("roller_up_overshoot", 15.0)
+        # Whether to drive the roller to its UP position the moment the node
+        # starts. Default False: the servo stays STILL until water is detected —
+        # a strong servo (e.g. MG995) otherwise jerks hard at launch, which looks
+        # like a false trigger. Set True only if the roller must be actively
+        # parked up before the first detection.
+        self.declare_parameter("park_at_start", False)
         active_high = self.get_parameter("relay_active_high").value
         self.use_sensor1 = self.get_parameter("use_sensor1").value
         self.use_sensor2 = self.get_parameter("use_sensor2").value
@@ -113,6 +119,10 @@ class WaterClean(Node):
         self.roller_up = self.get_parameter("roller_up_angle").value
         self.roller_down = self.get_parameter("roller_down_angle").value
         self.roller_overshoot = self.get_parameter("roller_up_overshoot").value
+        self.park_at_start = self.get_parameter("park_at_start").value
+        # True while the roller is lowered — so shutdown only lifts it when it is
+        # actually down, and the servo is never moved unnecessarily.
+        self._roller_dropped = False
         self.on = GPIO.HIGH if active_high else GPIO.LOW
         self.off = GPIO.LOW if active_high else GPIO.HIGH
 
@@ -147,10 +157,16 @@ class WaterClean(Node):
                     self.pi = None
                     self.use_roller = False
                 else:
-                    self.roller_lift()   # park it up before the mission starts
+                    # Only park the roller up at startup if explicitly asked —
+                    # otherwise leave the servo untouched so it does not move
+                    # until water is detected.
+                    if self.park_at_start:
+                        self.roller_lift()
                     self.get_logger().info(
                         f"Roller ready on GPIO{SERVO_PIN}: "
-                        f"UP={self.roller_up:.0f} deg, DOWN={self.roller_down:.0f} deg"
+                        f"UP={self.roller_up:.0f} deg, DOWN={self.roller_down:.0f} deg "
+                        f"(park_at_start={self.park_at_start} — "
+                        f"{'parked up now' if self.park_at_start else 'stays still until water detected'})"
                     )
 
         # Tells the coverage node to pause/resume while cleaning
@@ -211,6 +227,7 @@ class WaterClean(Node):
         if not self.use_roller or self.pi is None:
             return
         self.pi.set_servo_pulsewidth(SERVO_PIN, self.servo_us(self.roller_down))
+        self._roller_dropped = True
 
     def roller_lift(self):
         """Raise the roller clear of the floor (park position).
@@ -227,6 +244,7 @@ class WaterClean(Node):
         self.pi.set_servo_pulsewidth(SERVO_PIN, self.servo_us(past))
         time.sleep(0.25)
         self.pi.set_servo_pulsewidth(SERVO_PIN, self.servo_us(self.roller_up))
+        self._roller_dropped = False
 
     # ------------------------------ SENSORS ------------------------------
 
@@ -305,9 +323,10 @@ class WaterClean(Node):
 
     def destroy_node(self):
         try:
-            # Park the roller up before releasing the servo, so it does not drop
-            # onto the floor and drag when the node exits.
-            self.roller_lift()
+            # Only lift on exit if the roller is actually DOWN — so if no water was
+            # ever detected the servo is never moved, matching startup behaviour.
+            if self._roller_dropped:
+                self.roller_lift()
             if self.pi is not None:
                 self.pi.stop()
         except Exception:
