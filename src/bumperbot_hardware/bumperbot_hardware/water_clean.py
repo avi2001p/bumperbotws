@@ -4,16 +4,16 @@ water_clean.py
 --------------
 Water cleaning. When EITHER water sensor detects water:
 
-  1. STOP  (stop_duration s) — coverage PAUSED, robot stationary
-                               vacuum + fan ON, roller UP
-  2. MOVE  (move_duration s) — coverage RESUMED, robot driving
-                               vacuum + fan STILL ON, roller DOWN (sweeping)
-  3. Roller UP, then vacuum + fan OFF.
-     Total extraction time = stop_duration + move_duration (10 s).
-  4. COOLDOWN before the next detection can trigger.
+  1. STOP the robot, roller DOWN, vacuum + fan ON  (for clean_duration, ~5 s).
+  2. Roller UP, vacuum + fan OFF, robot RESUMES.
+  3. COOLDOWN before the next detection can trigger.
+  Next detection repeats the same cycle.
 
-Publishes /water_cleaning_active so the coverage node pauses (phase 1) and
-resumes (phase 2).
+Detection is edge-triggered (dry -> wet) with a debounce, so a probe that stays
+wet after use does NOT re-trigger, and the vacuum never runs continuously.
+
+Publishes /water_cleaning_active so the coverage/robot pauses while cleaning and
+resumes afterwards.
 
 The roller needs the pigpio daemon:   sudo pigpiod
 If it is not running (or the servo is not fitted) the node logs a warning and
@@ -70,12 +70,10 @@ class WaterClean(Node):
         # faulty module (EITHER enabled sensor being wet turns the vacuum+fan on).
         self.declare_parameter("use_sensor1", True)    # GPIO12 (pin 32)
         self.declare_parameter("use_sensor2", True)    # GPIO16 (pin 36)
-        # On detection the vacuum+fan run for (stop_duration + move_duration):
-        #   stop_duration  -> robot STOPPED  (coverage paused)
-        #   move_duration  -> robot MOVING   (coverage resumed)  <-- roller goes here later
-        # then they switch OFF and a cooldown blocks re-triggering.
-        self.declare_parameter("stop_duration", 5.0)
-        self.declare_parameter("move_duration", 5.0)
+        # On detection: STOP the robot, drop the roller, run vacuum + fan for
+        # clean_duration seconds, then lift the roller, switch off, and resume.
+        # A cooldown then blocks re-triggering for a moment.
+        self.declare_parameter("clean_duration", 5.0)
         self.declare_parameter("cooldown", 5.0)
         # How often the sensors are READ. This — not the driving speed — sets the
         # smallest wet spot the robot can catch: between two polls it travels
@@ -110,8 +108,7 @@ class WaterClean(Node):
         active_high = self.get_parameter("relay_active_high").value
         self.use_sensor1 = self.get_parameter("use_sensor1").value
         self.use_sensor2 = self.get_parameter("use_sensor2").value
-        self.stop_duration = self.get_parameter("stop_duration").value
-        self.move_duration = self.get_parameter("move_duration").value
+        self.clean_duration = self.get_parameter("clean_duration").value
         self.cooldown = self.get_parameter("cooldown").value
         self.poll_rate = max(1.0, self.get_parameter("poll_rate").value)
         self.debounce = max(1, int(self.get_parameter("debounce").value))
@@ -172,7 +169,7 @@ class WaterClean(Node):
         # Tells the coverage node to pause/resume while cleaning
         self.pub = self.create_publisher(Bool, WATER_CLEANING_TOPIC, 10)
 
-        # MONITORING -> CLEAN_STOPPED -> CLEAN_MOVING -> COOLDOWN -> MONITORING
+        # MONITORING -> CLEANING -> COOLDOWN -> MONITORING
         self.state = "MONITORING"
         self.t_mark = 0.0
 
@@ -209,8 +206,8 @@ class WaterClean(Node):
             f"Polling at {self.poll_rate:.0f} Hz -> at 0.10 m/s the robot moves "
             f"{0.10 / self.poll_rate * 1000.0:.0f} mm between sensor reads "
             f"(the smallest wet spot it can reliably catch). "
-            f"Sequence: STOP {self.stop_duration:.0f}s + MOVE {self.move_duration:.0f}s "
-            f"= {self.stop_duration + self.move_duration:.0f}s of vacuum+fan."
+            f"Sequence: detect -> STOP + roller DOWN + vacuum+fan ON for "
+            f"{self.clean_duration:.0f}s -> roller UP + OFF -> resume."
         )
 
     # ------------------------------ ROLLER ------------------------------
@@ -276,43 +273,31 @@ class WaterClean(Node):
             # Fire only on a fresh dry->wet edge: confirmed wet AND re-armed.
             if confirmed_wet and self.rearmed:
                 self.rearmed = False
-                # Phase 1: STOP the robot, vacuum + fan ON
+                # WATER DETECTED: stop the robot, roller DOWN, vacuum + fan ON.
+                self.pub.publish(Bool(data=True))          # coverage/robot PAUSES
+                self.roller_drop()
                 GPIO.output(VACUUM_PUMP_PIN, self.on)
                 GPIO.output(DC_FAN_PIN, self.on)
-                self.pub.publish(Bool(data=True))          # coverage PAUSES
-                self.state = "CLEAN_STOPPED"
+                self.state = "CLEANING"
                 self.t_mark = now
                 self.get_logger().info(
-                    f"WATER DETECTED -> ROBOT STOPPED, VACUUM + FAN ON "
-                    f"({self.stop_duration:.0f}s stationary)"
-                )
-
-        elif self.state == "CLEAN_STOPPED":
-            if now - self.t_mark >= self.stop_duration:
-                # Phase 2: resume driving, ROLLER DOWN, vacuum + fan STAY ON
-                self.roller_drop()
-                self.pub.publish(Bool(data=False))         # coverage RESUMES
-                self.state = "CLEAN_MOVING"
-                self.t_mark = now
-                self.get_logger().info(
-                    f"ROBOT MOVING again — ROLLER DOWN, VACUUM + FAN STILL ON "
-                    f"({self.move_duration:.0f}s while driving)"
+                    f"WATER DETECTED -> STOP, ROLLER DOWN, VACUUM + FAN ON "
+                    f"({self.clean_duration:.0f}s)"
                     + ("" if self.use_roller else "  [roller disabled]")
                 )
 
-        elif self.state == "CLEAN_MOVING":
-            if now - self.t_mark >= self.move_duration:
-                # Done: roller back up, then vacuum + fan off.
-                # Lift FIRST — cutting the suction while the roller is still down
-                # would drag the swept water back across clean floor.
+        elif self.state == "CLEANING":
+            if now - self.t_mark >= self.clean_duration:
+                # Done: roller UP first, then vacuum + fan OFF, then resume.
+                # Lift before cutting suction so nothing is dragged back.
                 self.roller_lift()
                 GPIO.output(VACUUM_PUMP_PIN, self.off)
                 GPIO.output(DC_FAN_PIN, self.off)
+                self.pub.publish(Bool(data=False))         # robot RESUMES
                 self.state = "COOLDOWN"
                 self.t_mark = now
-                total = self.stop_duration + self.move_duration
                 self.get_logger().info(
-                    f"ROLLER UP, VACUUM + FAN OFF (ran {total:.0f}s total). "
+                    f"CLEAN DONE -> ROLLER UP, VACUUM + FAN OFF, resuming. "
                     f"Cooldown {self.cooldown:.0f}s before next detection."
                 )
 

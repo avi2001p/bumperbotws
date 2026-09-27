@@ -43,8 +43,8 @@ class ServoTest(Node):
         num = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter("angle", 0.0, num)
         self.declare_parameter("cycle", False)
-        self.declare_parameter("up_angle", 20.0, num)      # roller UP (initial)
-        self.declare_parameter("down_angle", 0.0, num)     # roller DOWN
+        self.declare_parameter("up_angle", 0.0, num)       # roller UP (initial)
+        self.declare_parameter("down_angle", 20.0, num)    # roller DOWN (MG995: higher = down)
         self.declare_parameter("hold", 5.0, num)           # seconds down
         # Climb this many degrees PAST up_angle, then settle back on it —
         # compensates the servo landing short when lifting the roller.

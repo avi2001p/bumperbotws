@@ -57,9 +57,10 @@ def generate_launch_description():
     kff_arg = DeclareLaunchArgument("kff", default_value="0.38")
     # Relay board polarity (active-LOW module -> false).
     relay_arg = DeclareLaunchArgument("relay_active_high", default_value="false")
-    # Roller angles from servo_test calibration.
-    roller_up_arg = DeclareLaunchArgument("roller_up_angle", default_value="20.0")
-    roller_down_arg = DeclareLaunchArgument("roller_down_angle", default_value="0.0")
+    # Roller angles from servo_test calibration. MG995 turns opposite to the old
+    # SG90, so DOWN is the higher angle: up=0 lifts, down=20 lowers onto the floor.
+    roller_up_arg = DeclareLaunchArgument("roller_up_angle", default_value="0.0")
+    roller_down_arg = DeclareLaunchArgument("roller_down_angle", default_value="20.0")
     # Load the saved map for RViz (visual only — coverage never needs it).
     use_map_arg = DeclareLaunchArgument("use_map", default_value="false")
     # Stop-and-wait obstacle handling: ON by default. If something is in front of

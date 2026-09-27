@@ -39,8 +39,9 @@ def generate_launch_description():
     stop_dist_arg = DeclareLaunchArgument("obstacle_distance", default_value="0.30")
     kff_arg = DeclareLaunchArgument("kff", default_value="0.38")
     relay_arg = DeclareLaunchArgument("relay_active_high", default_value="false")
-    roller_up_arg = DeclareLaunchArgument("roller_up_angle", default_value="20.0")
-    roller_down_arg = DeclareLaunchArgument("roller_down_angle", default_value="0.0")
+    # MG995 turns opposite to the old SG90 -> DOWN is the higher angle.
+    roller_up_arg = DeclareLaunchArgument("roller_up_angle", default_value="0.0")
+    roller_down_arg = DeclareLaunchArgument("roller_down_angle", default_value="20.0")
 
     hardware_launch = IncludeLaunchDescription(
         os.path.join(
